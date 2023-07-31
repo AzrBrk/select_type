@@ -13,6 +13,14 @@ template<size_t N, class L>
 struct type_list_size {
 	static const size_t value = N + 1;
 };
+template<class A, class B>
+struct add_type {};
+
+template<template<class ...> class A, class B, class ...L>
+struct add_type<A<L...>, B> {
+	using type = A<L..., B>;
+};
+
 
 template<size_t N, template<class...> class TL, class T, class ...L>
 struct type_list_size < N, TL<T, L...>>
@@ -331,4 +339,55 @@ typename safe_select_type<exp_is_one_of<T,TL>::value, TL> get_index(T const& t, 
 	return {};
 }
 
+//这是一个雏形，实现一个类似tuple的容器，这里使用链表结构来模拟
+//使用元编程来实现
 
+//element_的四个参数分别表示，它是否是一个终结链表得元素？ 该结点的类型？ 类型列表？ 包装的指针类型？
+template<bool End_Type, size_t N, class TL, template<class...> class Pointer_Wrapper>
+struct element_ {};
+
+template<size_t N, class TL, template<class...> class Pointer_Wrapper>
+struct element_ <false, N, TL, Pointer_Wrapper>
+{
+	using e_type = typename select_type<N, TL>::type;
+	using next_type = element_<N == max_type_list_index<TL>::value - 1, N + 1, TL, Pointer_Wrapper>;
+	using next_pointer_type = Pointer_Wrapper<next_type>;
+
+	e_type value;
+	operator e_type() { return value; }
+
+	next_pointer_type next = nullptr;
+
+	void set_next(next_pointer_type p) { next = p; }
+	next_type& next_element() { return *next; }
+
+	element_(e_type const& e) :value(e) {}
+
+	static const bool has_next = true;
+	~element_()
+	{}
+};
+template<size_t N, class TL, template<class...> class Pointer_Wrapper>
+struct element_<true, N, TL, Pointer_Wrapper>
+{
+	using e_type = typename select_type<N, TL>::type;
+	e_type value;
+	operator e_type() { return value; }
+	element_(e_type const& e) :value(e) {}
+	static const bool has_next = false;
+};
+
+template<size_t N, class TL, template<class...> class Pointer_Wrapper>
+using element_node = element_<N == max_type_list_index<TL>::value, N, TL, Pointer_Wrapper>;
+
+template<class Value_Type, class Current_Node_Type, class Constructor>
+typename Current_Node_Type::next_pointer_type create_next(Current_Node_Type & _no, Value_Type const& val, Constructor&& con_f)
+{
+	static_assert(Current_Node_Type::has_next);
+	if constexpr (requires(Current_Node_Type cnt) { cnt.next; })
+	{
+		_no.next = con_f(typename Current_Node_Type::next_type(val), val);
+		return _no.next;
+	}
+	else return nullptr;
+}
