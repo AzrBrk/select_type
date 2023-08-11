@@ -6,6 +6,7 @@
 #include<vector>
 #include<type_traits>
 #include<string>
+#include<functional>
 template<class ...Arg_t>
 struct exp_list {};
 
@@ -13,14 +14,6 @@ template<size_t N, class L>
 struct type_list_size {
 	static const size_t value = N + 1;
 };
-template<class A, class B>
-struct add_type {};
-
-template<template<class ...> class A, class B, class ...L>
-struct add_type<A<L...>, B> {
-	using type = A<L..., B>;
-};
-
 
 template<size_t N, template<class...> class TL, class T, class ...L>
 struct type_list_size < N, TL<T, L...>>
@@ -45,11 +38,7 @@ struct max_type_list_index
 };
 template<class L>
 struct split_first
-{/*
-	using first = int;
-	using rest = int;
-	using type = int;*/
-};
+{};
 
 template<template<class...> class TL, class T, class ...L>
 struct split_first<TL<T, L...>>
@@ -70,6 +59,9 @@ struct recover_list
 template<size_t N, class T>
 struct select_type
 {
+	static const size_t Max_Value = max_type_list_index<T>::value;
+	static_assert((N <= Max_Value), "index overflow");
+
 	using type_list = recover_list<T>;
 	using first_type = type_list::first_type;
 	using lesser_type = type_list::rest;
@@ -82,31 +74,6 @@ struct select_type<0, T>
 	using type = first_type;
 };
 
-
-template< bool En, size_t N,class L>
-struct safe_select_type_impl
-{};
-template<size_t N, class L>
-struct safe_select_type_impl<true, N, L>
-{
-	using type = select_type<N, L>;
-};
-template<size_t N, class L>
-struct safe_select_type_impl<false, N, L>
-{
-	using type = std::false_type;
-};
-template<size_t N, class L>
-struct safe_select_type
-{
-	using type = safe_select_type_impl <(N > max_type_list_index<L>::value), N, L>::type;
-};
-template<size_t N, class T>
-struct select_type_any
-{
-	using to_list = boost::mp11::mp_rename<T, exp_list>;
-	using type = select_type<N, to_list>::type;
-};
 
 template<size_t N, class C, class T>
 struct exp_cmp
@@ -147,29 +114,74 @@ using exp_is_one_of
 	max_type_list_index<T>::value,
 	C, T>;
 
-template<size_t N, class List_type>
-struct type_c
-{
-	using current_int = boost::mp11::mp_append<List_type, exp_list<boost::mp11::mp_int<N>>>;
-	using type = type_c<N - 1, current_int>::type;
-};
 
-template<class List_type>
-struct type_c<0, List_type>
-{
-	using current_int = boost::mp11::mp_append<List_type, exp_list<boost::mp11::mp_int<0>>>;
-	using type = current_int;
-};
 
 template<class ...types>
 struct type_list
 {};
-template<class L>
-struct generate_index 
+
+
+template<class L, class T>
+struct exp_join_impl
+{};
+
+template<template<class...> class L, class T, class ...List>
+struct exp_join_impl<L<List...>, T>
 {
-	using tl = type_c<max_type_list_index<L>::value, type_list<>>::type;
-	using type = boost::mp11::mp_rename <tl, exp_list>;
+	using type = L<List..., T>;
 };
+template<class TL>
+struct exp_empty
+{};
+
+template<template<class...> class TL, class ...L>
+struct exp_empty < TL<L...>>
+{
+	using type = TL<>;
+};
+template<class L1, class L2>
+struct exp_join
+{};
+
+template<class L1, template<class...> class L2, class T, class ...List>
+struct exp_join<L1, L2<T, List...>>
+{
+	using join_type = typename exp_join_impl<L1, T>::type;
+	using type =typename exp_join <join_type, L2<List...>>::type;
+};
+template<class L1, template<class...> class L2>
+struct exp_join<L1, L2<>>
+{
+	using type = L1;
+};
+template<size_t Index, size_t Current_Idx, bool Equal_Length, class TL, class SUB>
+struct sub_type_list_impl
+{};
+
+template<size_t Index, size_t Current_Idx, template<class...> class TL, class SUB, class T, class ...L>
+struct sub_type_list_impl < Index, Current_Idx, false, TL<T, L...>, SUB>
+{
+	using current_type = typename exp_join_impl<SUB, T>::type;
+	using type = typename sub_type_list_impl<Index, Current_Idx + 1, (Index == Current_Idx +1 ), TL<L...>, current_type>::type;
+};
+template<size_t Index, size_t Current_Idx, template<class...> class TL, class SUB, class ...L>
+struct sub_type_list_impl <Index, Current_Idx, true, TL<L...>, SUB>
+{
+	using type = SUB;
+};
+
+template<size_t Index, class TL>
+struct Test_Index
+{
+	static_assert((Index <= max_type_list_index<TL>::value + 1), "Test Index Error :index overflow");
+	static const size_t value = Index;
+};
+
+template<size_t Index, class TL>
+using sub_type_list = sub_type_list_impl<Test_Index<(Index+1), TL>::value, 0, (Index+1) == 0, TL, typename exp_empty<TL>::type>::type;
+
+
+
 template<class T, template<class...> class F>
 struct exp_apply
 {};
@@ -223,33 +235,8 @@ template<class L1, class L2, template<class...> class Lt>
 struct exp_combine_with
 {
 	using type = exp_combine<L1, L2, Lt>::type;
-	//using type = boost::mp11::mp_rename<_type, Lt>;
 };
 
-template<class L>
-struct index_type_c
-{
-	using index = generate_index<L>::type;
-	using type = exp_combine<index, L>::type;
-};
-template<class list>
-struct list_index
-{
-	template<size_t N>
-	struct index
-	{
-		static const size_t value = N;
-		using type = select_type_any<N, list>::type;
-	};
-};
-
-template<class T>
-struct to_vector {
-	using type = std::vector<T>;
-};
-
-template<class T>
-using to_vector_f = to_vector<T>::type;
 
 template<bool Is_Unique, size_t N, class L>
 struct is_unique_type_list_t
@@ -283,76 +270,18 @@ template<class L>
 using is_unique_type_list = is_unique_type_list_t<false, max_type_list_index<L>::value, L>;
 
 
-
-template<class L, class en = std::enable_if_t<is_unique_type_list<L>::value>> //every_type in type_list must be unique
-struct exp_variable_storage
-{
-	using Exp_Vector_Type = exp_apply<L, to_vector_f>::type;
-	using Tuple_Storage = boost::mp11::mp_rename<Exp_Vector_Type, std::tuple>;
-
-	Tuple_Storage variable_storage{};
-
-	template<class T>
-	void push_variable(T const& t)
-	{
-		auto& type_vec = std::get<to_vector_f<T>>(variable_storage);
-		type_vec.push_back(std::move(t));
-	}
-	template<class T>
-	T& get_ref(int index)
-	{
-		auto& type_vec = std::get<to_vector_f<T>>(variable_storage);
-
-		if (index >= sizeof(type_vec)) throw std::exception("error: index out of range.");
-
-		return type_vec.at(index);
-	}
-};
-
-template<class T, class variable_storage_t>
-struct exp_variable
-{
-	variable_storage_t& vst;
-	int e_index;
-	T value() { return vst.get_ref<T>(e_index); }
-	template<class U>
-	void operator=(U u)
-	{
-		auto& ref = vst.get_ref<U>(e_index);
-		ref = u;
-	}
-};
-
-template<class variable_storage_t, class T>
-exp_variable<T, variable_storage_t> make_variable(variable_storage_t& t, int _index)
-{
-	return { t, _index };
-}
-
-template<
-	class T,
-	class TL, 
-	class En = std::enable_if_t<exp_is_one_of<T,TL>::value>
->
-typename safe_select_type<exp_is_one_of<T,TL>::value, TL> get_index(T const& t, TL const& tl)
-{
-	return {};
-}
-
-//这是一个雏形，实现一个类似tuple的容器，这里使用链表结构来模拟
-//使用元编程来实现
-
-//element_的四个参数分别表示，它是否是一个终结链表得元素？ 该结点的类型？ 类型列表？ 包装的指针类型？
 template<bool End_Type, size_t N, class TL, template<class...> class Pointer_Wrapper>
 struct element_ {};
 
 template<size_t N, class TL, template<class...> class Pointer_Wrapper>
 struct element_ <false, N, TL, Pointer_Wrapper>
 {
+	using element_type_list = TL;
 	using e_type = typename select_type<N, TL>::type;
 	using next_type = element_<N == max_type_list_index<TL>::value - 1, N + 1, TL, Pointer_Wrapper>;
 	using next_pointer_type = Pointer_Wrapper<next_type>;
-
+	static const size_t Index = N;
+	static const size_t capacity= max_type_list_index<TL>::value;
 	e_type value;
 	operator e_type() { return value; }
 
@@ -370,12 +299,18 @@ struct element_ <false, N, TL, Pointer_Wrapper>
 template<size_t N, class TL, template<class...> class Pointer_Wrapper>
 struct element_<true, N, TL, Pointer_Wrapper>
 {
+	using element_type_list = TL;
 	using e_type = typename select_type<N, TL>::type;
+
+	static const size_t Index = N;
+	static const size_t capacity = max_type_list_index<TL>::value;
+
 	e_type value;
 	operator e_type() { return value; }
 	element_(e_type const& e) :value(e) {}
 	static const bool has_next = false;
 };
+
 
 template<size_t N, class TL, template<class...> class Pointer_Wrapper>
 using element_node = element_<N == max_type_list_index<TL>::value, N, TL, Pointer_Wrapper>;
@@ -383,11 +318,223 @@ using element_node = element_<N == max_type_list_index<TL>::value, N, TL, Pointe
 template<class Value_Type, class Current_Node_Type, class Constructor>
 typename Current_Node_Type::next_pointer_type create_next(Current_Node_Type & _no, Value_Type const& val, Constructor&& con_f)
 {
-	static_assert(Current_Node_Type::has_next);
+	//static_assert(Current_Node_Type::has_next);
 	if constexpr (requires(Current_Node_Type cnt) { cnt.next; })
 	{
-		_no.next = con_f(typename Current_Node_Type::next_type(val), val);
+		_no.next = con_f.template operator()<typename Current_Node_Type::next_type>(val);
 		return _no.next;
 	}
 	else return nullptr;
 }
+
+template<class T>
+using test_type = typename T::type;
+
+template<class Nextable>
+struct forwarder
+{
+	using type = typename Nextable::next_type;
+};
+
+template<class T, class R, class ...L>
+struct function_forwarder
+{
+	using type = std::function<R(typename forwarder<T>::type&, L...)>;
+	type call;
+};
+
+
+
+
+template<class _node, class T, class constructor_f>
+void push_back(_node& _n, T const& value, constructor_f&& cf)
+{
+	if constexpr (requires(_node _nn) { _nn.next; })
+	{
+		if (!_n.next)
+		{
+			create_next(_n, value, cf);
+			return;
+		}
+	}
+	if constexpr (_node::has_next == true)
+	{
+		function_forwarder<_node, void, T, constructor_f> ff;
+		ff.call = push_back<
+			typename forwarder<_node>::type,
+			T, constructor_f
+		>;
+		ff.call(*(_n.next), value, cf);
+	}
+}
+template<class X, class Y>
+void exp_assign(X& x, Y const& y)
+{
+	if constexpr (std::is_same_v<X, Y>)
+	{
+		x = y;
+	}
+}
+template<class _node, class T>
+void assign_at(_node& _n, T const& value, size_t idx)
+{
+	if (!idx) { exp_assign(_n.value, value); return; }
+	if constexpr (_node::has_next == true)
+	{
+		if (!_n.next && idx) { std::cout << "fatal error: index overflow!"; return; }
+	}
+	if constexpr (_node::has_next == true)
+	{
+		function_forwarder<_node, void, T, size_t> ff;
+		ff.call = assign_at<typename forwarder<_node>::type, T>;
+		ff.call(_n.next_element(), value, --idx);
+	}
+}
+
+template<class _node, class func, class...L>
+void do_at(_node& _n, func&& f, size_t idx, L...l)
+{
+	if (!idx) { 
+		f(_n.value, l...);
+		return; 
+	}
+	if constexpr (_node::has_next == true)
+	{
+		if (!_n.next && idx) { std::cout << "fatal error: index overflow!"; return; }
+	}
+	if constexpr (_node::has_next == true)
+	{
+		function_forwarder<_node, void, func, size_t, L...> ff;
+		ff.call = do_at<typename forwarder<_node>::type, func>;
+		ff.call(_n.next_element(), f, --idx);
+	}
+}
+
+template<class _node, class func, class...L>
+void loop_with(_node& _n, func&& f, L...l)
+{
+	f(_n.value, l...);
+	if constexpr (_node::has_next == true)
+	{
+		if (!_n.next) return;
+		function_forwarder<_node, void, func, L...> ff;
+		ff.call = loop_with<typename forwarder<_node>::type, func, L...>;
+		ff.call(_n.next_element(), f, l...);
+	}
+}
+
+
+
+template<class _node>
+struct exp_iterator
+{
+	_node& first_node;
+	size_t exp_index{ 0 };
+	exp_iterator(_node& _n) :first_node(_n) {}
+
+	void operator++()
+	{
+		++exp_index;
+	}
+	void reset() { exp_index = 0; }
+	size_t size()
+	{
+		size_t s{ 0 };
+		auto get_size = [&s](auto && ...l)
+			{
+				++s;
+			};
+		loop_with(first_node, get_size);
+		return s;
+	}
+	template<class T>
+	exp_iterator(T const& value) :first_node(value) {}
+	template<class T, class construct_f>
+	void exp_push_back(T const& value, construct_f&& f)
+	{
+		push_back(first_node, value, f);
+	}
+	template<class T>
+	T operator=(T const& value) { assign_at(first_node, value, exp_index); return value; }
+
+	std::ostream& operator>>(std::ostream& os)
+	{
+		auto output = [&os](auto& value)->void
+			{
+				os << value;
+			};
+		do_at(first_node, output, exp_index);
+		return os;
+	}
+	friend std::istream& operator >>(std::istream& is, exp_iterator<_node>& _n)
+	{
+		auto input = [&is](auto& value)->void
+			{
+				is >> value;
+			};
+		do_at(_n.first_node, input, _n.exp_index);
+		return is;
+	}
+};
+
+template<class T, class ...L> 
+element_node < 0, exp_list<T, L...>, std::shared_ptr> make_element_node(auto&& constructor, T const& t, L...l)
+{
+	element_node < 0, exp_list<T, L...>, std::shared_ptr> first_node(t);
+	(create_next(first_node, l, constructor), ...);
+	return first_node;
+}
+template<class T>
+struct ref_wrapper
+{
+	T& value;
+	ref_wrapper(T& _v) :value(_v) {};
+	ref_wrapper(const ref_wrapper& rw) :value(rw.value) {}
+	operator T& () { return value; }
+	friend std::istream& operator>>(std::istream& is, ref_wrapper<T>& rw)
+	{
+		is >> rw.value;
+		return is;
+	}
+	friend std::ostream& operator<<(std::ostream& os, ref_wrapper<T>& rw)
+	{
+		os << rw.value;
+		return os;
+	}
+};
+template<class Tuple>
+struct tuple_iterator_types
+{
+	using node_list_type = exp_apply<Tuple, ref_wrapper>::type;
+
+	using first_node_type = element_node<0, node_list_type, std::shared_ptr>;
+
+	using iterator_type = exp_iterator<first_node_type>;
+};
+
+template<class _node, class Tuple> void get_from_tuple(_node& _n, Tuple& tp)
+{
+	auto shr_con = []<class Ty, class T>(T & value) { return std::make_shared<Ty>(value); };
+
+	if constexpr (_node::has_next && (_node::Index < max_type_list_index<Tuple>::value))
+	{
+		auto rwp = ref_wrapper(std::get <_node::Index + 1>(tp)) ;
+		create_next(_n, rwp, shr_con);
+		function_forwarder<_node, void, Tuple&> ff;
+		ff.call = get_from_tuple<typename forwarder<_node>::type, Tuple>;
+		ff.call(_n.next_element(), tp);
+	}
+}
+template<class Tuple>
+struct tuple_iterator
+{
+	typename tuple_iterator_types<Tuple>::first_node_type first_node;
+	exp_iterator<typename tuple_iterator_types<Tuple>::first_node_type> __tuple_iterator;
+	Tuple& _tp;
+	tuple_iterator(Tuple& tp) :_tp(tp), first_node(std::get<0>(tp)), __tuple_iterator(first_node) { initialize(); }
+	void initialize()
+	{
+		get_from_tuple(first_node, _tp);
+	}
+	exp_iterator<typename tuple_iterator_types<Tuple>::first_node_type>& iterator() { return __tuple_iterator; }
+};
