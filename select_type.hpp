@@ -367,13 +367,49 @@ void push_back(_node& _n, T const& value, constructor_f&& cf)
 		ff.call(*(_n.next), value, cf);
 	}
 }
+
+template<class T>
+struct is_warpped
+{
+	static const bool value = false;
+};
+
+template<template<class> class wrapper, class T>
+struct is_warpped<wrapper<T>>
+{
+	static const bool value = true;
+	using type = T;
+};
 template<class X, class Y>
 void exp_assign(X& x, Y const& y)
 {
 	if constexpr (std::is_same_v<X, Y>)
 	{
 		x = y;
+		return;
 	}
+	if constexpr (is_warpped<X>::value)
+	{
+		if constexpr (std::is_same_v<typename is_warpped<X>::type, Y>)
+		{
+			x = y;
+			return;
+		}
+	}
+	if constexpr (is_warpped<Y>::value)
+	{
+		if constexpr (std::is_same_v<X, typename is_warpped<Y>::type>)
+		{
+			if constexpr (requires(Y v) { v.value; })
+			{
+				x = y.value;
+				return;
+			}
+			std::cout << "warning:there is no Y::value is not a member of Y" << std::endl;
+		
+		}
+	}
+	std::cout << "warning:type dismatched:" << typeid(x).name() << "," << typeid(y).name() << std::endl;
 }
 template<class _node, class T>
 void assign_at(_node& _n, T const& value, size_t idx)
@@ -431,11 +467,19 @@ struct exp_iterator
 	_node& first_node;
 	size_t exp_index{ 0 };
 	exp_iterator(_node& _n) :first_node(_n) {}
+	template<class T>
+	T operator=(T const& value) { assign_at(first_node, value, exp_index); return value; }
 
 	void operator++()
 	{
 		++exp_index;
 	}
+	exp_iterator<_node>& operator[](size_t i) 
+	{
+		exp_index = i;
+		return *this;
+	}
+	void operator=(auto& value) {}
 	void reset() { exp_index = 0; }
 	size_t size()
 	{
@@ -454,8 +498,7 @@ struct exp_iterator
 	{
 		push_back(first_node, value, f);
 	}
-	template<class T>
-	T operator=(T const& value) { assign_at(first_node, value, exp_index); return value; }
+
 
 	std::ostream& operator>>(std::ostream& os)
 	{
@@ -477,11 +520,20 @@ struct exp_iterator
 	}
 };
 
+template<class T, class Exp_iter>
+T fetch_value(T& va, Exp_iter& it)
+{
+	auto fetch = [&va](auto value) { exp_assign(va, value); };
+	do_at(it.first_node, fetch, it.exp_index);
+	return va;
+}
+
+
 template<class T, class ...L> 
 element_node < 0, exp_list<T, L...>, std::shared_ptr> make_element_node(auto&& constructor, T const& t, L...l)
 {
 	element_node < 0, exp_list<T, L...>, std::shared_ptr> first_node(t);
-	(create_next(first_node, l, constructor), ...);
+	(::push_back(first_node, l, constructor), ...);
 	return first_node;
 }
 template<class T>
@@ -490,7 +542,9 @@ struct ref_wrapper
 	T& value;
 	ref_wrapper(T& _v) :value(_v) {};
 	ref_wrapper(const ref_wrapper& rw) :value(rw.value) {}
+	T& operator=(T const& v) { value = v; return value; }
 	operator T& () { return value; }
+	operator T () { return value; }
 	friend std::istream& operator>>(std::istream& is, ref_wrapper<T>& rw)
 	{
 		is >> rw.value;
