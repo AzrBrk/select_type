@@ -479,7 +479,7 @@ struct exp_iterator
 		exp_index = i;
 		return *this;
 	}
-	void operator=(auto& value) {}
+	
 	void reset() { exp_index = 0; }
 	size_t size()
 	{
@@ -583,6 +583,8 @@ template<class Tuple>
 struct tuple_iterator
 {
 	typename tuple_iterator_types<Tuple>::first_node_type first_node;
+	using iterator_type = typename tuple_iterator_types<Tuple>::iterator_type;
+
 	exp_iterator<typename tuple_iterator_types<Tuple>::first_node_type> __tuple_iterator;
 	Tuple& _tp;
 	tuple_iterator(Tuple& tp) :_tp(tp), first_node(std::get<0>(tp)), __tuple_iterator(first_node) { initialize(); }
