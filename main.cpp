@@ -1,41 +1,45 @@
-#include"select_type.hpp"
-#include<memory>
 #include<iostream>
 #include<functional>
-#include<tuple>
-using m_t_list = exp_list<int, double, char, unsigned, char>;
+#include"join_list.h"
+#include<string>
 
-using first_node_type = element_node<0, m_t_list, std::shared_ptr>;
+int foo(int x)
+{
+	return x;
+}
 
+int sum(int x, int y, int z)
+{
+	return x + y + z;
+}
 
+struct X
+{
+	int foo(int x)
+	{
+		return x;
+	}
 
+	int sum(int x, int y, int z)
+	{
+		return x + y + z;
+	}
+};
+
+void print(auto x)
+{
+	std::cout << x << std::endl;
+}
+using namespace exp_bind;
 int main()
 {
-	auto str_tup = std::make_tuple(std::string("this is "), 2, std::string(" , another integer is "), 10);
-	tuple_iterator<decltype(str_tup)> st_iter(str_tup);
-	auto& it = st_iter.iterator();
-	std::string str{};
-	it[1] = 4;
-	for (auto i = 0; i < it.size(); ++i)
-	{
-		it[i] >> std::cout;
-	}
-	std::cout << std::endl;
-	it.reset();
+	X x;
+	auto emw = exp_mem_wrap(x, &X::sum);
+	auto efb = bind_mem(emw);
 
-	int d_v{ 1 };
-
-	std::cout << "fetch second integer value:";
-	std::cout << fetch_value(d_v, it[3]) << std::endl;
-	auto shr_con = []<class Ty, class T>(T & value) { return std::make_shared<Ty>(value); };
-
-	auto ils = make_element_node(shr_con, 1, 2.77, 3);
-	exp_iterator<decltype(ils)> ils_it(ils);
-	ils_it[1] = 7.93;
-	for (auto i = 0; i < ils_it.size(); ++i)
-	{
-		ils_it[i] >> std::cout << " ";
-	}
-	
-	return 0;
+	efb.bind(1);
+	efb.bind_a_lot(2, 3);
+	print(efb());
+	efb[2] = 0;
+	print(efb());
 }

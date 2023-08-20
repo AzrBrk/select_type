@@ -1,5 +1,4 @@
 #pragma once
-#include<boost/mp11.hpp>
 #include<iostream>
 #include<tuple>
 #include<variant>
@@ -47,6 +46,26 @@ struct split_first<TL<T, L...>>
 	using rest = TL<L...>;
 	using type = TL<T, L...>;
 };
+
+namespace experiment{
+	template<bool Ignore, size_t Index, size_t NInc, class TL>
+	struct erase_until
+	{};
+	template<size_t Index, size_t NInc, class TL>
+	struct erase_until <true, Index, NInc, TL>
+	{
+		using type = erase_until<NInc != Index, Index, NInc + 1, typename split_first<TL>::rest>::type;
+	};
+	template<size_t Index, size_t NInc, class TL>
+	struct erase_until <false, Index, NInc, TL>
+	{
+		using type = TL;
+	};
+
+	template<size_t Index, class TL>
+	using exp_ignore_until = typename erase_until<Index != 0, Index, 0, TL>::type;
+}
+
 
 template<class T>
 struct recover_list
@@ -116,10 +135,6 @@ using exp_is_one_of
 
 
 
-template<class ...types>
-struct type_list
-{};
-
 
 template<class L, class T>
 struct exp_join_impl
@@ -154,6 +169,7 @@ struct exp_join<L1, L2<>>
 {
 	using type = L1;
 };
+
 template<size_t Index, size_t Current_Idx, bool Equal_Length, class TL, class SUB>
 struct sub_type_list_impl
 {};
@@ -177,8 +193,26 @@ struct Test_Index
 	static const size_t value = Index;
 };
 
+
+
 template<size_t Index, class TL>
-using sub_type_list = sub_type_list_impl<Test_Index<(Index+1), TL>::value, 0, (Index+1) == 0, TL, typename exp_empty<TL>::type>::type;
+using sub_type_list = sub_type_list_impl<Test_Index<(Index), TL>::value, 0, (Index) == 0, TL, typename exp_empty<TL>::type>::type;
+
+namespace experiment{
+	template<size_t Index, class mtl>
+	struct erase_at_t
+	{
+		static_assert(Index <= max_type_list_index<mtl>::value - 1);
+		using front = sub_type_list<Index - 1, mtl>;
+		using back = exp_ignore_until<Index + 1, mtl>;
+		using type = typename exp_join<front, back>::type;
+	};
+	template<class mtl>
+	struct erase_at_t<0, mtl>
+	{
+		using type = typename split_first<mtl>::rest;
+	};
+}
 
 
 
@@ -189,52 +223,6 @@ template<template<class...> class L, template<class...> class F, class ...D>
 struct exp_apply <L<D...>, F>
 {
 	using type = L<F<D>...>;
-};
-
-
-template<class L1, class L2, size_t N>
-struct exp_combine_impl
-{
-	using type = exp_list<typename select_type<N, L1>::type, typename select_type<N, L2>::type>;
-};
-
-template<bool en, size_t N, class L1, class L2, class List>
-struct exp_combine_t
-{};
-
-template<size_t N, class L1, class L2, class List>
-struct exp_combine_t<true, N, L1, L2, List>
-{
-	using ct = exp_combine_impl<L1, L2, N>::type;
-	using current_type = boost::mp11::mp_append<List, exp_list<ct>>;
-	using type = exp_combine_t<true, N - 1, L1, L2, current_type>::type;
-};
-template<class L1, class L2, class List>
-struct exp_combine_t<true, 0, L1, L2, List>
-{
-	using ct = exp_combine_impl<L1, L2, 0>::type;
-	using current_type = boost::mp11::mp_append<List, exp_list<ct>>;
-	using type = current_type;
-};
-template<size_t N, class L1, class L2, class List>
-struct exp_combine_t<false, N, L1, L2, List>
-{
-	using type = std::false_type;//error:length of two lists are not same!!!
-};
-
-template<class L1, class L2, template<class...> class Lt = exp_list>
-struct exp_combine
-{
-	using S1 = boost::mp11::mp_int<boost::mp11::mp_size<L1>::value>;
-	using S2 = boost::mp11::mp_int<boost::mp11::mp_size<L2>::value>;
-	using List = Lt<typename exp_combine_impl<L1, L2, max_type_list_index<L1>::value>::type>;
-	using type = exp_combine_t<std::is_same<S1, S2>::value, max_type_list_index<L1>::value -1, L1, L2, List>::type;
-};
-
-template<class L1, class L2, template<class...> class Lt>
-struct exp_combine_with
-{
-	using type = exp_combine<L1, L2, Lt>::type;
 };
 
 
@@ -314,6 +302,12 @@ struct element_<true, N, TL, Pointer_Wrapper>
 
 template<size_t N, class TL, template<class...> class Pointer_Wrapper>
 using element_node = element_<N == max_type_list_index<TL>::value, N, TL, Pointer_Wrapper>;
+
+template<template<class...> class PW = std::shared_ptr, class ...TL>
+using exp_node = element_node<0, exp_list<TL...>, PW>;
+
+template<class ...L>
+using exp_shared_node = exp_node<std::shared_ptr, L...>;
 
 template<class Value_Type, class Current_Node_Type, class Constructor>
 typename Current_Node_Type::next_pointer_type create_next(Current_Node_Type & _no, Value_Type const& val, Constructor&& con_f)
@@ -594,3 +588,5 @@ struct tuple_iterator
 	}
 	exp_iterator<typename tuple_iterator_types<Tuple>::first_node_type>& iterator() { return __tuple_iterator; }
 };
+
+
