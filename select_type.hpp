@@ -6,6 +6,10 @@
 #include<type_traits>
 #include<string>
 #include<functional>
+
+
+struct shared_constructor;
+
 template<class ...Arg_t>
 struct exp_list {};
 
@@ -45,6 +49,12 @@ struct split_first<TL<T, L...>>
 	using first = T;
 	using rest = TL<L...>;
 	using type = TL<T, L...>;
+};
+
+template<size_t I>
+struct exp_index
+{
+	const static size_t value = I;
 };
 
 namespace experiment{
@@ -93,6 +103,14 @@ struct select_type<0, T>
 	using type = first_type;
 };
 
+template<class TL1, template<class...> class TL2>
+struct exp_rename{};
+
+template<template<class ...> class TL1, template<class ...> class TL2, class ...L>
+struct exp_rename<TL1<L...>, TL2>
+{
+	using type = TL2<L...>;
+};
 
 template<size_t N, class C, class T>
 struct exp_cmp
@@ -169,7 +187,20 @@ struct exp_join<L1, L2<>>
 {
 	using type = L1;
 };
-
+template<class ...L>
+struct exp_join_a_lot
+{};
+template<class L1, class L2, class ...L>
+struct exp_join_a_lot<L1, L2, L...>
+{
+	using join_type = typename exp_join<L1, L2>::type;
+	using type = typename exp_join_a_lot<join_type, L...>::type;
+};
+template<class L1, class L2>
+struct exp_join_a_lot<L1, L2>
+{
+	using type = typename exp_join<L1, L2>::type;
+};
 template<size_t Index, size_t Current_Idx, bool Equal_Length, class TL, class SUB>
 struct sub_type_list_impl
 {};
@@ -280,6 +311,7 @@ struct element_ <false, N, TL, Pointer_Wrapper>
 
 	element_(e_type const& e) :value(e) {}
 
+
 	static const bool has_next = true;
 	~element_()
 	{}
@@ -363,13 +395,13 @@ void push_back(_node& _n, T const& value, constructor_f&& cf)
 }
 
 template<class T>
-struct is_warpped
+struct is_wrapped
 {
 	static const bool value = false;
 };
 
 template<template<class> class wrapper, class T>
-struct is_warpped<wrapper<T>>
+struct is_wrapped<wrapper<T>>
 {
 	static const bool value = true;
 	using type = T;
@@ -382,24 +414,24 @@ void exp_assign(X& x, Y const& y)
 		x = y;
 		return;
 	}
-	if constexpr (is_warpped<X>::value)
+	if constexpr (is_wrapped<X>::value)
 	{
-		if constexpr (std::is_same_v<typename is_warpped<X>::type, Y>)
+		if constexpr (std::is_same_v<typename is_wrapped<X>::type, Y>)
 		{
 			x = y;
 			return;
 		}
 	}
-	if constexpr (is_warpped<Y>::value)
+	if constexpr (is_wrapped<Y>::value)
 	{
-		if constexpr (std::is_same_v<X, typename is_warpped<Y>::type>)
+		if constexpr (std::is_same_v<X, typename is_wrapped<Y>::type>)
 		{
 			if constexpr (requires(Y v) { v.value; })
 			{
 				x = y.value;
 				return;
 			}
-			std::cout << "warning:there is no Y::value is not a member of Y" << std::endl;
+			std::cout << "warning:there is no Y::value, it is not a member of Y" << std::endl;
 		
 		}
 	}
@@ -424,9 +456,9 @@ void assign_at(_node& _n, T const& value, size_t idx)
 template<class _node, class func, class...L>
 void do_at(_node& _n, func&& f, size_t idx, L...l)
 {
-	if (!idx) { 
-		f(_n.value, l...);
-		return; 
+	if (!idx) {
+		f(_n.value, std::forward<L>(l)...);
+		return;
 	}
 	if constexpr (_node::has_next == true)
 	{
@@ -437,6 +469,24 @@ void do_at(_node& _n, func&& f, size_t idx, L...l)
 		function_forwarder<_node, void, func, size_t, L...> ff;
 		ff.call = do_at<typename forwarder<_node>::type, func>;
 		ff.call(_n.next_element(), f, --idx);
+	}
+}
+template<class _node, class func, class...L>
+void do_with_node_at(_node& _n, func&& f, size_t idx, L...l)
+{
+	if (!idx) { 
+		f(_n, std::forward<L>(l)...);
+		return; 
+	}
+	if constexpr (_node::has_next == true)
+	{
+		if (!_n.next && idx) { std::cout << "fatal error: index overflow!"; return; }
+	}
+	if constexpr (_node::has_next == true)
+	{
+		function_forwarder<_node, void, func, size_t, L...> ff;
+		ff.call = do_with_node_at<typename forwarder<_node>::type, func, L...>;
+		ff.call(_n.next_element(), f, --idx, l...);
 	}
 }
 
@@ -460,7 +510,11 @@ struct exp_iterator
 {
 	_node& first_node;
 	size_t exp_index{ 0 };
+
+
 	exp_iterator(_node& _n) :first_node(_n) {}
+
+
 	template<class T>
 	T operator=(T const& value) { assign_at(first_node, value, exp_index); return value; }
 
@@ -485,23 +539,14 @@ struct exp_iterator
 		loop_with(first_node, get_size);
 		return s;
 	}
+
 	template<class T>
 	exp_iterator(T const& value) :first_node(value) {}
+
 	template<class T, class construct_f>
 	void exp_push_back(T const& value, construct_f&& f)
 	{
 		push_back(first_node, value, f);
-	}
-
-
-	std::ostream& operator>>(std::ostream& os)
-	{
-		auto output = [&os](auto& value)->void
-			{
-				os << value;
-			};
-		do_at(first_node, output, exp_index);
-		return os;
 	}
 	friend std::istream& operator >>(std::istream& is, exp_iterator<_node>& _n)
 	{
@@ -512,7 +557,19 @@ struct exp_iterator
 		do_at(_n.first_node, input, _n.exp_index);
 		return is;
 	}
+	friend std::ostream& operator <<(std::ostream& os, exp_iterator<_node>& _n)
+	{
+		auto output = [&os](auto& value)->void
+			{
+				os << value;
+			};
+		do_at(_n.first_node, output, _n.exp_index);
+		return os;
+	}
 };
+
+template<class _node>
+exp_iterator(_node& n) -> exp_iterator<_node>;
 
 template<class T, class Exp_iter>
 T fetch_value(T& va, Exp_iter& it)
@@ -537,8 +594,9 @@ struct ref_wrapper
 	ref_wrapper(T& _v) :value(_v) {};
 	ref_wrapper(const ref_wrapper& rw) :value(rw.value) {}
 	T& operator=(T const& v) { value = v; return value; }
-	operator T& () { return value; }
+	//operator T& () { return value; }
 	operator T () { return value; }
+	ref_wrapper<T>& operator=(const ref_wrapper<T>& another) { return *this; }
 	friend std::istream& operator>>(std::istream& is, ref_wrapper<T>& rw)
 	{
 		is >> rw.value;
@@ -550,10 +608,28 @@ struct ref_wrapper
 		return os;
 	}
 };
+
+template<class T>
+struct auto_ref_unwrapper_impl
+{
+	using type = T;
+};
+template<class T>
+struct auto_ref_unwrapper_impl<ref_wrapper<T>>
+{
+	using type = T;
+};
+
+template<class T>
+using auto_ref_unwrapper = typename auto_ref_unwrapper_impl<T>::type;
+
+
 template<class Tuple>
 struct tuple_iterator_types
 {
-	using node_list_type = exp_apply<Tuple, ref_wrapper>::type;
+	using node_list_type_impl = typename exp_apply<Tuple, ref_wrapper>::type;
+
+	using node_list_type = typename exp_rename<node_list_type_impl, exp_list>::type;
 
 	using first_node_type = element_node<0, node_list_type, std::shared_ptr>;
 
@@ -567,7 +643,7 @@ template<class _node, class Tuple> void get_from_tuple(_node& _n, Tuple& tp)
 	if constexpr (_node::has_next && (_node::Index < max_type_list_index<Tuple>::value))
 	{
 		auto rwp = ref_wrapper(std::get <_node::Index + 1>(tp)) ;
-		create_next(_n, rwp, shr_con);
+		create_next(_n, rwp, shared_constructor());
 		function_forwarder<_node, void, Tuple&> ff;
 		ff.call = get_from_tuple<typename forwarder<_node>::type, Tuple>;
 		ff.call(_n.next_element(), tp);
@@ -579,14 +655,53 @@ struct tuple_iterator
 	typename tuple_iterator_types<Tuple>::first_node_type first_node;
 	using iterator_type = typename tuple_iterator_types<Tuple>::iterator_type;
 
-	exp_iterator<typename tuple_iterator_types<Tuple>::first_node_type> __tuple_iterator;
+	iterator_type __tuple_iterator;
 	Tuple& _tp;
 	tuple_iterator(Tuple& tp) :_tp(tp), first_node(std::get<0>(tp)), __tuple_iterator(first_node) { initialize(); }
 	void initialize()
 	{
 		get_from_tuple(first_node, _tp);
 	}
-	exp_iterator<typename tuple_iterator_types<Tuple>::first_node_type>& iterator() { return __tuple_iterator; }
+	iterator_type& iterator() { return __tuple_iterator; }
+	iterator_type& operator[](unsigned int index) { return __tuple_iterator[index]; }
+};
+
+template<class ...L>
+tuple_iterator(std::tuple<L...>& tp) -> tuple_iterator<std::tuple<L...>>;
+
+struct shared_constructor
+{
+	template<class Ty, class T>
+	std::shared_ptr<Ty> operator()(T const& value)
+	{
+		if constexpr (std::is_same<typename Ty::e_type, T>::value)
+		{
+			return construct<Ty>(value);
+		}
+		else {
+			std::cout << "warning: type_dismatched: " << typeid(typename Ty::e_type).name() << "," << typeid(value).name() << std::endl;
+			return nullptr;
+		}
+	}
+
+	template<class Ty, class T>
+	std::shared_ptr<Ty> construct(T const& value){
+		return std::make_shared<Ty>(value);
+	}
+};
+
+struct make_node_shared
+{
+	template<class _node>
+	auto operator()(_node&& n)
+	{
+		auto sh_node = std::make_shared<typename std::remove_reference<_node>::type>(n.value);
+		if constexpr (std::remove_reference<_node>::type::has_next)
+		{
+			exp_assign(sh_node->next, n.next);
+		}
+		return sh_node;
+	}
 };
 
 

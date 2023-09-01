@@ -5,6 +5,20 @@ namespace exp_bind{
 	template<class F>
 	struct exp_function_binder {};
 	
+	template<class T>
+	struct check_ref
+	{
+		static const bool  value = false;
+	};
+	template<class T>
+	struct check_ref<T&>
+	{
+		static const bool  value = true;
+	};
+
+	template<class T>
+	using check_ref_v = check_ref<T>::value;
+
 	template<class R, class ...L>
 	struct exp_function_binder<R(L...)>
 	{
@@ -12,8 +26,12 @@ namespace exp_bind{
 		it's aiming at manipulating function arguments,\
 		use std::function instead");
 		using type = std::function<R(L...)>;
-		std::tuple<L...> args_stack{};
-		tuple_iterator<std::tuple<L...>> args_iter_keep{ args_stack };
+		using argument_list_type = exp_list<L...>;
+
+		using return_type = R;
+
+		std::tuple <auto_ref_unwrapper<L> ... > args_stack{};
+		tuple_iterator<std::tuple<auto_ref_unwrapper<L>...>> args_iter_keep{ args_stack };
 		type func_binder;
 		using func_type = R(L...);
 
@@ -98,6 +116,10 @@ namespace exp_bind{
 			auto lamb = [&_wrapper](L...l) { return _wrapper.apply(l...); };
 			func = lamb;
 		}
+		R operator()(L... l)
+		{
+			return func(std::forward<L>(l)...);
+		}
 	};
 
 
@@ -123,6 +145,7 @@ namespace exp_bind{
 	{
 		return { f };
 	}
+	//lambda support, use std::function to convert lambda
 	template<class F>
 	auto bind(F&& f)
 	{
@@ -142,4 +165,10 @@ namespace exp_bind{
 		exp_function_binder<decltype(_sfu)::fn_type> efb(wp.func);
 		return efb;
 	}
+	template<class T, class R, class ...MFA>
+	exp_member_function_wrapper(T& obj, decl_mem_type<T, R, MFA...> mf) -> exp_member_function_wrapper<T, decl_mem_type<T, R, MFA...>>;
+	template<class R, class ...L>
+	exp_function_binder(decl_fn_type<R, L...> fn) -> exp_function_binder<decl_fn_type<R, L...>>;
+	template<class F>
+	exp_function_binder(std::function<F> f) -> exp_function_binder<typename _std_fn_unwrapper<typename decltype(f)>::fn_type>;
 }
