@@ -1,5 +1,5 @@
 #pragma once
-#include"exp_function_binder.h"
+#include"exp_function_binder.hpp"
 
 namespace exp_bind
 {
@@ -134,8 +134,6 @@ namespace exp_bind
 	template<class _node>
 	auto unwrapped_node(_node& _n)
 	{
-		
-
 		using _node_type = typename exp_apply<typename _node::element_type_list, auto_ref_unwrapper>::type;
 		using _node_impl = typename exp_rename<_node_type, exp_shared_node>::type;
 		_node_impl new_node(_n.value.value);

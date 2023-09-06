@@ -9,6 +9,19 @@
 
 
 struct shared_constructor;
+template<class T>
+struct check_ref
+{
+	static const bool  value = false;
+};
+template<class T>
+struct check_ref<T&>
+{
+	static const bool  value = true;
+};
+
+template<class T>
+using check_ref_v = check_ref<T>::value;
 
 template<class ...Arg_t>
 struct exp_list {};
@@ -29,9 +42,19 @@ struct type_list_size<N, TL<T>>
 {
 	static const size_t value = N + 1;
 };
-
 template<class L>
 using size_of_type_list = type_list_size<0, L>;
+
+template<class T>
+struct is_empty_list
+{
+	static const bool value = false;
+};
+template<template<class...> class TL>
+struct is_empty_list<TL<>>
+{
+	static const bool value = true;
+};
 
 
 template<class T>
@@ -74,6 +97,8 @@ namespace experiment{
 
 	template<size_t Index, class TL>
 	using exp_ignore_until = typename erase_until<Index != 0, Index, 0, TL>::type;
+
+	
 }
 
 
@@ -302,6 +327,7 @@ struct element_ <false, N, TL, Pointer_Wrapper>
 	static const size_t Index = N;
 	static const size_t capacity= max_type_list_index<TL>::value;
 	e_type value;
+	e_type& value_ref() { return value; }
 	operator e_type() { return value; }
 
 	next_pointer_type next = nullptr;
@@ -326,6 +352,7 @@ struct element_<true, N, TL, Pointer_Wrapper>
 	static const size_t capacity = max_type_list_index<TL>::value;
 
 	e_type value;
+	e_type& value_ref() { return value; }
 	operator e_type() { return value; }
 	element_(e_type const& e) :value(e) {}
 	static const bool has_next = false;
@@ -457,7 +484,7 @@ template<class _node, class func, class...L>
 void do_at(_node& _n, func&& f, size_t idx, L...l)
 {
 	if (!idx) {
-		f(_n.value, std::forward<L>(l)...);
+		f(_n.value_ref(), std::forward<L>(l)...);
 		return;
 	}
 	if constexpr (_node::has_next == true)
@@ -467,8 +494,8 @@ void do_at(_node& _n, func&& f, size_t idx, L...l)
 	if constexpr (_node::has_next == true)
 	{
 		function_forwarder<_node, void, func, size_t, L...> ff;
-		ff.call = do_at<typename forwarder<_node>::type, func>;
-		ff.call(_n.next_element(), f, --idx);
+		ff.call = do_at<typename forwarder<_node>::type, func, L...>;
+		ff.call(_n.next_element(), f, --idx, std::forward<L>(l)...);
 	}
 }
 template<class _node, class func, class...L>
@@ -516,7 +543,16 @@ struct exp_iterator
 
 
 	template<class T>
-	T operator=(T const& value) { assign_at(first_node, value, exp_index); return value; }
+	T operator=(T const& value) { 
+		assign_at(first_node, value, exp_index); 
+		return value; 
+	}
+	exp_iterator<_node>& operator=(const exp_iterator<_node> & it)
+	{
+		auto node_transfer = [this](auto const& value) {(*this) = value; };
+		do_at(it.first_node, node_transfer, it.exp_index);
+		return *this;
+	}
 
 	void operator++()
 	{
@@ -594,12 +630,13 @@ struct ref_wrapper
 	ref_wrapper(T& _v) :value(_v) {};
 	ref_wrapper(const ref_wrapper& rw) :value(rw.value) {}
 	T& operator=(T const& v) { value = v; return value; }
+	ref_wrapper& operator=(const ref_wrapper& rw) { value = rw.value; return *this; }
 	//operator T& () { return value; }
 	operator T () { return value; }
-	ref_wrapper<T>& operator=(const ref_wrapper<T>& another) { return *this; }
 	friend std::istream& operator>>(std::istream& is, ref_wrapper<T>& rw)
 	{
-		is >> rw.value;
+		if constexpr (requires(std::istream & i, ref_wrapper<T> r) { i >> r.value; })
+			is >> rw.value;
 		return is;
 	}
 	friend std::ostream& operator<<(std::ostream& os, ref_wrapper<T>& rw)
@@ -663,7 +700,7 @@ struct tuple_iterator
 		get_from_tuple(first_node, _tp);
 	}
 	iterator_type& iterator() { return __tuple_iterator; }
-	iterator_type& operator[](unsigned int index) { return __tuple_iterator[index]; }
+	iterator_type& operator[](size_t index) { return __tuple_iterator[index]; }
 };
 
 template<class ...L>
