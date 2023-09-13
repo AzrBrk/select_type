@@ -33,10 +33,10 @@ namespace exp_bind{
 		using return_type = R;
 		exp_function_binder(func_type _f) :func_binder(_f) {}
 		exp_function_binder(type stdfunc) :func_binder(stdfunc) {}
-
+		exp_function_binder() {}
 		//Since EFB uses reference to arg_stack
 		//A default copy operation causes error
-		exp_function_binder(exp_function_binder&& efb) :
+		exp_function_binder(exp_function_binder&& efb) noexcept:
 			args_stack(efb.args_stack),
 			current_index(efb.current_index),
 			func_binder(efb.func_binder),
@@ -48,7 +48,11 @@ namespace exp_bind{
 			func_binder(efb.func_binder),
 			args_iter_keep(args_stack)
 		{}
-
+		exp_function_binder& operator=(const exp_function_binder& efb)
+		{
+			func_binder = efb.func_binder;
+			return *this;
+		}
 		std::tuple <auto_ref_unwrapper<L> ... > args_stack{};
 		tuple_iterator<std::tuple<auto_ref_unwrapper<L>...>> args_iter_keep{ args_stack };
 		type func_binder;
@@ -99,7 +103,6 @@ namespace exp_bind{
 			current_index = 0;
 			return std::apply([*this](auto&& ...l) { return func_binder(l...); }, std::move(args_stack));
 		}
-
 		template<class ...L>
 		R operator()(L...l)
 		{
@@ -130,37 +133,18 @@ namespace exp_bind{
 		}
 	};
 	
-	template<class T, class F>
-	struct exp_member_function_wrapper
-	{};
-
-
-	template<class T, class R, class ...L>
-	struct exp_member_function_wrapper<T, R(T::*)(L...)>
-	{
-
-		member_function_wrapper<T, R(T::*)(L...)> wrapper;
-		using func_type = R(T::*)(L...);
-		exp_member_function_wrapper(T& obj, func_type mf) :wrapper(obj, mf) { apply(); }
-
-		std::function<R(L...)> func;
-
-		void apply() {
-			auto& _wrapper = wrapper;
-			auto lamb = [&_wrapper](L...l) { return _wrapper.apply(l...); };
-			func = lamb;
-		}
-		R operator()(L... l)
-		{
-			return func(std::forward<L>(l)...);
-		}
-	};
 
 
 	template<class T, class R, class ...L>
 	using decl_mem_type = R(T::*)(L...);
 	template<class R, class ...L>
 	using decl_fn_type = R(L...);
+
+	template<class F>
+	struct fn_return_type
+	{
+		using type = exp_function_binder<F>::return_type;
+	};
 
 	template<class _std_fn>
 	struct _std_fn_unwrapper
@@ -173,7 +157,28 @@ namespace exp_bind{
 		std::function<fn> fnc;
 		_std_fn_unwrapper(std::function<fn> f):fnc(f){}
 	};
+
+	template<class T>
+	struct rem_ptr_impl{
+		using type = T;
+	};
+	template<class T>
+	struct rem_ptr_impl<T*>
+	{
+		using type = T;
+	};
+
+	template<class T>
+	using remove_pointer = typename rem_ptr_impl<T>::type;
 	
+	template<auto f>
+	using fn_return = typename fn_return_type<
+		remove_pointer<decltype(f)>
+	>::type;
+
+	template<auto f, typename R>
+	using fn_return_is = std::is_same<fn_return<f>, R>;
+
 	template<class R, class ...L>
 	exp_function_binder<decl_fn_type<R, L...>> bind(decl_fn_type<R, L...> f)
 	{
@@ -187,18 +192,6 @@ namespace exp_bind{
 		_std_fn_unwrapper<decltype(ff)> sf(ff);
 		return exp_function_binder<typename decltype(sf)::fn_type>{ff};
 	}
-	template<class T, class R, class ...L>
-	exp_member_function_wrapper<T, decl_mem_type<T, R, L...>> exp_mem_wrap(T& obj, decl_mem_type<T, R, L...> mf)
-	{
-		return { obj, mf };
-	}
-	template<class Wrapper>
-	auto bind_mem(Wrapper& wp)
-	{
-		_std_fn_unwrapper<decltype(wp.func)> _sfu(wp.func);
-		exp_function_binder<decltype(_sfu)::fn_type> efb(wp.func);
-		return efb;
-	}
 
 	template<class T, class R, class ...L>
 	auto bind_mfw(T& obj, decl_mem_type<T, R, L...> mf)
@@ -211,11 +204,12 @@ namespace exp_bind{
 	{
 		return bind(bind_mfw(obj, f));
 	}
+
+	template<auto x>
+	using make_binder = exp_function_binder<remove_pointer<decltype(x)>>;
 	template<class T, class R, class ...L>
 	member_function_wrapper(T& obj, decl_mem_type<T, R, L...> mf) -> member_function_wrapper<T, R(T::*)(L...)>;
 
-	template<class T, class R, class ...MFA>
-	exp_member_function_wrapper(T& obj, decl_mem_type<T, R, MFA...> mf) -> exp_member_function_wrapper<T, decl_mem_type<T, R, MFA...>>;
 	template<class R, class ...L>
 	exp_function_binder(decl_fn_type<R, L...> fn) -> exp_function_binder<decl_fn_type<R, L...>>;
 	template<class F>

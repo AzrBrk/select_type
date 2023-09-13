@@ -6,22 +6,12 @@
 #include<type_traits>
 #include<string>
 #include<functional>
+#include<memory>
 
 
 struct shared_constructor;
 template<class T>
-struct check_ref
-{
-	static const bool  value = false;
-};
-template<class T>
-struct check_ref<T&>
-{
-	static const bool  value = true;
-};
-
-template<class T>
-using check_ref_v = check_ref<T>::value;
+struct ref_wrapper;
 
 template<class ...Arg_t>
 struct exp_list {};
@@ -87,12 +77,18 @@ namespace experiment{
 	template<size_t Index, size_t NInc, class TL>
 	struct erase_until <true, Index, NInc, TL>
 	{
-		using type = erase_until<NInc != Index, Index, NInc + 1, typename split_first<TL>::rest>::type;
+		using type = typename erase_until<NInc != Index, Index, NInc + 1, typename split_first<TL>::rest>::type;
 	};
 	template<size_t Index, size_t NInc, class TL>
 	struct erase_until <false, Index, NInc, TL>
 	{
 		using type = TL;
+	};
+	
+	template<size_t NInc, class TL>
+	struct erase_until<false, 0, NInc, TL>
+	{
+		using type = typename split_first<TL>::rest;
 	};
 
 	template<size_t Index, class TL>
@@ -105,9 +101,9 @@ namespace experiment{
 template<class T>
 struct recover_list
 {
-	using first_type = split_first<T>::first;
-	using rest = split_first<T>::rest;
-	using type = split_first<T>::type;
+	using first_type = typename split_first<T>::first;
+	using rest =typename split_first<T>::rest;
+	using type = typename split_first<T>::type;
 };
 
 template<size_t N, class T>
@@ -117,14 +113,14 @@ struct select_type
 	static_assert((N <= Max_Value), "index overflow");
 
 	using type_list = recover_list<T>;
-	using first_type = type_list::first_type;
-	using lesser_type = type_list::rest;
-	using type = select_type<N - 1, lesser_type>::type;
+	using first_type =typename type_list::first_type;
+	using lesser_type = typename type_list::rest;
+	using type =typename select_type<N - 1, lesser_type>::type;
 };
 template<class T>
 struct select_type<0, T>
 {
-	using first_type = recover_list<T>::first_type;
+	using first_type = typename recover_list<T>::first_type;
 	using type = first_type;
 };
 
@@ -252,15 +248,15 @@ struct Test_Index
 
 
 template<size_t Index, class TL>
-using sub_type_list = sub_type_list_impl<Test_Index<(Index), TL>::value, 0, (Index) == 0, TL, typename exp_empty<TL>::type>::type;
+using sub_type_list = typename sub_type_list_impl<Test_Index<(Index), TL>::value, 0, (Index) == 0, TL, typename exp_empty<TL>::type>::type;
 
 namespace experiment{
 	template<size_t Index, class mtl>
 	struct erase_at_t
 	{
-		static_assert(Index <= max_type_list_index<mtl>::value - 1);
-		using front = sub_type_list<Index - 1, mtl>;
-		using back = exp_ignore_until<Index + 1, mtl>;
+		static_assert(Index <= max_type_list_index<mtl>::value);
+		using front = sub_type_list<Index, mtl>;
+		using back = exp_ignore_until<Index, mtl>;
 		using type = typename exp_join<front, back>::type;
 	};
 	template<class mtl>
@@ -288,8 +284,8 @@ struct is_unique_type_list_t
 template<size_t N, class L>
 struct is_unique_type_list_t<false, N, L>//if a type is unique in a list;
 {
-	using first_type = recover_list<L>::first_type;
-	using rest_type = recover_list<L>::rest;
+	using first_type = typename recover_list<L>::first_type;
+	using rest_type = typename recover_list<L>::rest;
 	static const bool value = is_unique_type_list_t<
 		exp_is_one_of<first_type, rest_type>::value,//if first type is one of a type in rest types
 		N - 1,
@@ -433,6 +429,45 @@ struct is_wrapped<wrapper<T>>
 	static const bool value = true;
 	using type = T;
 };
+template<class T>
+struct is_reference_type { static const bool value = false; };
+template<class T>
+struct is_reference_type<T&> { static const bool value = true; };
+
+template<class T, template<class...> class PT = std::shared_ptr>
+using reference_pointer = PT<ref_wrapper<T>>;
+
+template<class T>
+reference_pointer<T> make_shared_ref(T& vr) { return shared_constructor().construct<ref_wrapper<T>>(ref_wrapper<T>(vr)); }
+
+template<class T>
+reference_pointer<T>& operator<<(reference_pointer<T>& rp, T& vr)
+{
+	rp = make_shared_ref(vr);
+	return rp;
+}
+
+template<class WP, template<class...> class T>
+struct is_wrapped_with{};
+
+template<template<class...> class wrapper1, template<class...> class wrapper2, class T>
+struct is_wrapped_with<wrapper1<T>, wrapper2> {
+	static const bool value = std::is_same<wrapper1<T>, wrapper2<T>>::value;
+};
+
+template<class X, class Y>
+void exp_assign(X& x, Y& y_ref)
+{
+	if constexpr (requires (X & _x, Y & y) { *_x << y; })
+	{
+		*x << y_ref;
+	}
+	if constexpr (requires (X & _x, Y const& y) { *_x = y; })
+	{
+		*x = y_ref;
+	}
+}
+
 template<class X, class Y>
 void exp_assign(X& x, Y const& y)
 {
@@ -742,3 +777,10 @@ struct make_node_shared
 };
 
 
+
+template<class T, template<class...>class TL>
+struct is_wrap_with
+{
+	using TE = typename exp_empty<T>::type;
+	static const bool value = std::is_same<TE, TL<>>::value;
+};

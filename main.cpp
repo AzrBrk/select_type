@@ -1,109 +1,130 @@
-#include"exp_function_binder.hpp"
-#include"join_list.h"
-#include"exp_function_series.hpp"
+#include <iostream>
+#include "exp_function_series.hpp"
+#include "select_type.hpp"
+#include "exp_print.hpp"
+#include "function_impl.hpp"
+using namespace exp_print;
 
-constexpr auto _shift = true;
-
-void print(auto&& x, bool shift = false)
-{
-	std::cout << x;
-	if (shift) std::cout << std::endl;
-}
-
-void print(auto &&...x)
-{
-	(print(x), ...);
-}
-
-void print_as_line(auto &&...x)
-{
-	print(x...);
-	print('\n');
-}
-
-void print_node(auto& node)
-{
-	exp_iterator iter{ node };
-	for (auto i = 0; i < iter.size(); ++i)
-	{
-		print(iter[i]);
-		print(' ');
-	}
-}
-
-void print_tuple(auto& _tuple)
-{
-	tuple_iterator tpiter{ _tuple };
-	for (auto i = 0; i < tpiter.iterator().size(); ++i)
-	{
-		print(tpiter.iterator()[i],' ');
-	}
-}
-void print_type(auto&& x)
-{
-	print(typeid(x).name(), _shift);
-}
-char foo(char c, int a) { return c + a; }
-int foo2(int a, int b) { 
-	print((char)('A'+ a + b), ' ');
-	return a + b; 
-}
-int foo3(int a, int b, int c) { 
-	print((char)('a' + a + b + c), ' ');
-	return a + b + c;
+template<size_t Idx, class T>
+struct inserter {
+	static const int value = Idx;
+	using type = T;
 };
-void foov(int a) { print(++a); }
+template<class TL, class Inserter>
+struct insert_at_impl
+{
+	using front = sub_type_list<Inserter::value + 1, TL>;
+	using back = experiment::exp_ignore_until<Inserter::value, TL>;
+	using type = typename exp_join_a_lot<front,
+		exp_list<typename Inserter::type>,
+		back>::type;
+};
+template<class TL, class Inserter>
+using insert_at = typename insert_at_impl<TL, Inserter>::type;
 
-using namespace exp_bind;
+using mtl = exp_list<char, int, double, char, char>;
+using namespace function_impl;
+struct X {};
+
+template<size_t N, class node, class T>
+auto insert_node(node n, T const& v)
+{
+	auto node_maker = [](auto && ...x) {
+		return make_element_node(shared_constructor(), x...);
+		};
+
+	using new_typelist = insert_at<
+		typename node::element_type_list,
+		inserter<N, T>>;
+
+	auto maker_binder = exp_bind::bind(
+		function_impl::realize_meta<new_typelist>(node_maker));
+
+	auto bind_efb = [&maker_binder](auto& value) {
+		maker_binder.bind(value);
+		};
+	size_t pos{};
+	for (; pos <= N; ++pos) {
+		do_at(n, bind_efb, pos);
+	}
+	maker_binder.bind(v);
+	for (; pos <= exp_iterator<node>{n}.size() - N; ++pos) {
+		do_at(n, bind_efb, pos);
+	}
+	return maker_binder.apply_func();
+}
+
+template<size_t N, class tuple_t, class T>
+auto insert_tuple(tuple_t& tp, T const& v)
+{
+	tuple_iterator ti{ tp };
+	auto uwNode = exp_bind::unwrapped_node(ti.first_node);
+	auto newTpNode = insert_node<N>(uwNode, v);
+	return exp_bind::node_to_tuple(newTpNode);
+}
+
+struct super_base {
+	virtual void call() {}
+	virtual void set(void(*p)(void*)) {}
+	virtual void destroy() { delete this; }
+};
+
+template<class T>
+struct super_inherit:super_base
+{
+	T* pointer{};
+	super_inherit(T* p) noexcept :pointer(p) {};
+	void call() {
+		(*pointer)._continue();
+	}
+	void destroy()
+	{
+		delete pointer;
+	}
+	~super_inherit()
+	{
+		//delete pointer;
+	}
+};
+template<class T>
+super_inherit(T val) -> super_inherit<T>;
+
+template<class T>
+using add_ptr = T*;
 using namespace exp_function_series;
-struct X
-{
-	char foo(char c, int a) { 
-		for (auto i = 0; i < a; ++i)
-		{
-			print(c);
-		}
-		print('!', _shift); 
-		return c + a; 
-	}
-	int foo2(int a, int b) {
-		for(auto i = 0; i< a+b;++i)
-		{
-			print("啊");
-		}
-		print('!', _shift);
-		return a + b;
-	}
-	int foo3(int a, int b, int c) {
-		for (auto i = 0; i < a + b + c; ++i)
-		{
-			print("啊");
-		}
-		print('!', _shift);
-		return a + b + c;
-	};
-	void foov(int a) { print(++a); }
 
+
+
+class student_score
+{
+public:
+	student_score() {}
+	void set_score(int score) { m_score = score; }
+	int get_score() { return m_score; }
+	void set_name(std::string name) { m_name = name; }
+	std::string get_name() { return m_name; }
+private:
+	int m_score{};
+	std::string m_name{};
 };
-#define _MF(Class, Fun) &##Class##::##Fun
-template<class T, class ...F>
-auto object_self_move(T& obj, F ...f)
-{
-	auto make_bind = [&obj](auto&& mf) {return exp_bind::bind(obj, mf); };
-	return link_efb(make_bind(f)...);
-}
-auto main() -> int
-{
-	{
-		X x{};
-		auto fl = object_self_move(x, _MF(X,foo), _MF(X, foo2), _MF(X, foo3));
-		series_bind(fl, 'A', 1, 2, 3, 4, 5, 6);
-		print_type(fl);
-		fl._stop_at(1);
-		fl.bind_last_return();
-		fl[1]._continue();
-		print_tuple(fl._return());
-	}
 
+void set_student_score(student_score* ss, auto && link_o, std::string name, int score)
+{
+	auto [_1/*因为函数返回 void*/, _2/*因为函数返回 void*/, mname, mscore] = link_o(ss, name, score);
+	std::println(std::cout, "student: {} , score: {} recorded\n", mname, mscore);
+}
+using exp_function_series::link_object;
+
+
+template<class T>
+concept vector_type = requires(T a) { is_wrapped_with<decltype(a), std::vector>::value; };
+
+template<class T>
+void foo(vector_type<T> A) {};
+int main()
+{
 	
+	int a;
+	foo(a);
+
 }
