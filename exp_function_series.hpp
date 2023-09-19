@@ -1,6 +1,7 @@
 #pragma once
 #include"join_list.h"
 #include<type_traits>
+#include"tuple_iterator_metainfo.hpp"
 //link multiple function as one, use a same argument stack
 namespace exp_function_series
 {
@@ -57,7 +58,7 @@ namespace exp_function_series
 		using ret_list = typename auto_wrap_void<ret_list_impl>;
 		using tuples_type = typename exp_apply<arg_list, rename_to_tuple>::type;
 		using ret_node_type = typename exp_rename<ret_list, exp_shared_node>::type;
-		using ret_tuple_type = typename exp_rename<ret_list, std::tuple>::type;
+		using ret_tuple_type = tuple_preprocess::preprocess_tuple<typename exp_rename<ret_list, std::tuple>::type>;
 	};
 	//functions linker class
 	template<class ...EFBS>
@@ -165,6 +166,8 @@ namespace exp_function_series
 		{
 			return std::get<max_type_list_index<decltype(re_tuple)>::value>(re_tuple);
 		}
+		//get functions counts
+		size_t size() { return func_iter.size(); }
 	};
 	template<class Node>
 	struct transform_node_to_series_type
@@ -250,6 +253,7 @@ namespace exp_function_series
 	template<class T, class ...F>
 	struct link_object
 	{
+		using class_type = T;
 		T* obj_pointer{ nullptr };
 		decltype(exp_bind::bind(object_series<T, F...>)) link_efb;
 		link_object(F...fs) :link_efb(bind_impl<T>(fs...)) {};

@@ -1,5 +1,6 @@
 #pragma once
 #include<utility>
+#include "exp_function_binder.hpp"
 namespace function_impl
 {
 	template<class TL, class F>
@@ -24,4 +25,5 @@ namespace function_impl
 	{
 		return meta_function{ TL(), f };
 	}
+	
 }

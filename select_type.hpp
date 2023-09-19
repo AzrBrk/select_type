@@ -2,7 +2,6 @@
 #include<iostream>
 #include<tuple>
 #include<variant>
-#include<vector>
 #include<type_traits>
 #include<string>
 #include<functional>
@@ -123,6 +122,9 @@ struct select_type<0, T>
 	using first_type = typename recover_list<T>::first_type;
 	using type = first_type;
 };
+
+template<size_t Idx, class TL>
+using exp_select = typename select_type<Idx, TL>::type;
 
 template<class TL1, template<class...> class TL2>
 struct exp_rename{};
@@ -434,21 +436,66 @@ struct is_reference_type { static const bool value = false; };
 template<class T>
 struct is_reference_type<T&> { static const bool value = true; };
 
-template<class T, template<class...> class PT = std::shared_ptr>
-using reference_pointer = PT<ref_wrapper<T>>;
+template<class T>
+struct reference_pointer_impl {};
 
 template<class T>
-reference_pointer<T> make_shared_ref(T& vr) { return shared_constructor().construct<ref_wrapper<T>>(ref_wrapper<T>(vr)); }
-
-template<class T>
-reference_pointer<T>& operator<<(reference_pointer<T>& rp, T& vr)
+struct reference_pointer_impl<T&>
 {
-	rp = make_shared_ref(vr);
-	return rp;
-}
+	using data_type = T;
+	T* ptr{ nullptr };
+	reference_pointer_impl() {}
+	reference_pointer_impl(T& ref) :ptr(&ref) {};
+	reference_pointer_impl(const reference_pointer_impl& rp) :ptr(rp.ptr) {};
+	operator T& () { return *ptr; }
+	reference_pointer_impl& operator=(T& ref) { 
+		ptr = &ref; 
+		return *this; }
+	reference_pointer_impl& operator=(T const& value) {
+		if (ptr) { *ptr = value; }
+		return *this;
+	}
+	reference_pointer_impl& operator=(reference_pointer_impl const& value) {
+		ptr = value.ptr; return *this;
+	}
+};
+
+template<class T>
+using exp_reference_pointer = reference_pointer_impl<T>;
+
+template<class RP, class T>
+struct reference_pointer_compatible
+{
+	static const bool value = false;
+};
+template<class T>
+struct reference_pointer_compatible<reference_pointer_impl<T&>, T>
+{
+	static const bool value = true;
+};
+template<class T>
+struct reference_pointer_compatible<reference_pointer_impl<T&>, reference_pointer_impl<T&>>
+{
+	static const bool value = true;
+};
+template<class T>
+struct reference_pointer_compatible<T, reference_pointer_impl<T&>>
+{
+	static const bool value = true;
+};
+template<class T>
+struct reference_pointer_compatible<T&, reference_pointer_impl<T&>>
+{
+	static const bool value = true;
+};
+
+template<class X, class Y>
+constexpr bool RP_compatible = reference_pointer_compatible<X, Y>::value;
 
 template<class WP, template<class...> class T>
-struct is_wrapped_with{};
+struct is_wrapped_with{
+	static const bool value = false;
+};
 
 template<template<class...> class wrapper1, template<class...> class wrapper2, class T>
 struct is_wrapped_with<wrapper1<T>, wrapper2> {
@@ -456,33 +503,24 @@ struct is_wrapped_with<wrapper1<T>, wrapper2> {
 };
 
 template<class X, class Y>
-void exp_assign(X& x, Y& y_ref)
+struct assign_impl
 {
-	if constexpr (requires (X & _x, Y & y) { *_x << y; })
-	{
-		*x << y_ref;
-	}
-	if constexpr (requires (X & _x, Y const& y) { *_x = y; })
-	{
-		*x = y_ref;
-	}
-}
+	static const bool cond1 = std::is_same_v<X, Y>;
+	static const bool cond2 = is_wrapped<X>::value && std::is_same_v<typename is_wrapped<X>::type, Y>;
+	static const bool cond3 = is_wrapped<X>::value && RP_compatible<typename is_wrapped<X>::type, Y>;
+	static const bool value = (cond1 || cond2 || cond3);
+};
+
+template<class X, class Y>
+constexpr bool exp_assignable = assign_impl<X, Y>::value;
 
 template<class X, class Y>
 void exp_assign(X& x, Y const& y)
 {
-	if constexpr (std::is_same_v<X, Y>)
+	if constexpr (exp_assignable<X, Y>)
 	{
 		x = y;
 		return;
-	}
-	if constexpr (is_wrapped<X>::value)
-	{
-		if constexpr (std::is_same_v<typename is_wrapped<X>::type, Y>)
-		{
-			x = y;
-			return;
-		}
 	}
 	if constexpr (is_wrapped<Y>::value)
 	{
@@ -565,7 +603,8 @@ void loop_with(_node& _n, func&& f, L...l)
 	}
 }
 
-
+template<class T, class TL>
+constexpr bool is_in_list = exp_is_one_of<T, TL>::value;
 
 template<class _node>
 struct exp_iterator
@@ -582,13 +621,31 @@ struct exp_iterator
 		assign_at(first_node, value, exp_index); 
 		return value; 
 	}
+	template<class T, 
+		class En = std::enable_if_t<
+		is_in_list<T, 
+		typename _node::element_type_list>
+		>
+	>
+	bool operator ==(T const& value) const
+	{
+		bool _reflex{false};
+		do_with_node_at(
+			first_node, 
+			[&_reflex, value]<class in_node>(in_node& cmp_v) {
+				if constexpr(std::is_same_v<typename in_node::e_type, T>)
+					_reflex = (cmp_v.value == value);
+			}, 
+			exp_index
+		);
+		return _reflex;
+	}
 	exp_iterator<_node>& operator=(const exp_iterator<_node> & it)
 	{
 		auto node_transfer = [this](auto const& value) {(*this) = value; };
 		do_at(it.first_node, node_transfer, it.exp_index);
 		return *this;
 	}
-
 	void operator++()
 	{
 		++exp_index;
@@ -664,7 +721,10 @@ struct ref_wrapper
 	T& value;
 	ref_wrapper(T& _v) :value(_v) {};
 	ref_wrapper(const ref_wrapper& rw) :value(rw.value) {}
-	T& operator=(T const& v) { value = v; return value; }
+	ref_wrapper& operator=(T const& v) { value = v; return *this; }
+	template<class U> requires RP_compatible<T, U>
+	ref_wrapper& operator=(U const& v) { value = v; return *this; }
+	
 	ref_wrapper& operator=(const ref_wrapper& rw) { value = rw.value; return *this; }
 	//operator T& () { return value; }
 	operator T () { return value; }
@@ -751,7 +811,7 @@ struct shared_constructor
 			return construct<Ty>(value);
 		}
 		else {
-			std::cout << "warning: type_dismatched: " << typeid(typename Ty::e_type).name() << "," << typeid(value).name() << std::endl;
+			std::cout << "warning: type_mismatched: " << typeid(typename Ty::e_type).name() << "," << typeid(value).name() << std::endl;
 			return nullptr;
 		}
 	}
@@ -784,3 +844,27 @@ struct is_wrap_with
 	using TE = typename exp_empty<T>::type;
 	static const bool value = std::is_same<TE, TL<>>::value;
 };
+template<size_t Idx, class T>
+struct inserter {
+	static const int value = Idx;
+	using type = T;
+};
+template<class TL, class Inserter>
+struct insert_at_impl
+{
+	using front = sub_type_list<Inserter::value + 1, TL>;
+	using back = experiment::exp_ignore_until<Inserter::value, TL>;
+	using type = typename exp_join_a_lot<front,
+		exp_list<typename Inserter::type>,
+		back>::type;
+};
+template<class TL, class Inserter>
+using insert_at = typename insert_at_impl<TL, Inserter>::type;
+template<bool cnd, class A, class B>
+struct condition_select_impl {};
+template<class A, class B>
+struct condition_select_impl<true, A, B> { using type = A; };
+template<class A, class B>
+struct condition_select_impl<false, A, B> { using type = B; };
+template<bool cnd, class A, class B>
+using exp_if = typename condition_select_impl<cnd, A, B>::type;

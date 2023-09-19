@@ -1,5 +1,6 @@
 #pragma once
 #include"select_type.hpp"
+#include"tuple_iterator_metainfo.hpp"
 
 namespace exp_bind{
 	template<class F>
@@ -31,6 +32,7 @@ namespace exp_bind{
 		using argument_list_type = exp_list<L...>;
 		using func_type = R(L...);
 		using return_type = R;
+		using argc_stack_type = tuple_preprocess::preprocess_tuple<std::tuple<L...>>;
 		exp_function_binder(func_type _f) :func_binder(_f) {}
 		exp_function_binder(type stdfunc) :func_binder(stdfunc) {}
 		exp_function_binder() {}
@@ -53,8 +55,8 @@ namespace exp_bind{
 			func_binder = efb.func_binder;
 			return *this;
 		}
-		std::tuple <auto_ref_unwrapper<L> ... > args_stack{};
-		tuple_iterator<std::tuple<auto_ref_unwrapper<L>...>> args_iter_keep{ args_stack };
+		argc_stack_type args_stack{};
+		tuple_iterator<argc_stack_type> args_iter_keep{ args_stack };
 		type func_binder;
 		
 
@@ -73,7 +75,7 @@ namespace exp_bind{
 
 	
 
-		typename tuple_iterator<std::tuple<L...>>::iterator_type& operator[](size_t index)
+		typename tuple_iterator<argc_stack_type>::iterator_type& operator[](size_t index)
 		{
 			return args_iter_keep.iterator()[index];//return iterator of function stack
 		}
@@ -155,7 +157,6 @@ namespace exp_bind{
 	{
 		using fn_type = fn;
 		std::function<fn> fnc;
-		_std_fn_unwrapper(std::function<fn> f):fnc(f){}
 	};
 
 	template<class T>
@@ -186,11 +187,11 @@ namespace exp_bind{
 	}
 	//lambda support, use std::function to convert lambda
 	template<class F>
-	auto bind(F&& f)
+	auto bind(F && f)
 	{
 		std::function ff = f;
-		_std_fn_unwrapper<decltype(ff)> sf(ff);
-		return exp_function_binder<typename decltype(sf)::fn_type>{ff};
+		using func_form = _std_fn_unwrapper<decltype(ff)>::fn_type;
+		return exp_function_binder<func_form>{ff};
 	}
 
 	template<class T, class R, class ...L>
