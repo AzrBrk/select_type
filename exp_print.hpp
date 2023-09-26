@@ -12,7 +12,7 @@ namespace exp_print
 	void print_type(auto&& x);
 	void print_tuple(auto& tp, char delim =',');
 
-	void _shift()
+	inline void _shift()
 	{
 		std::cout << '\n';
 	}

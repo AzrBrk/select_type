@@ -323,7 +323,7 @@ struct element_ <false, N, TL, Pointer_Wrapper>
 	using next_type = element_<N == max_type_list_index<TL>::value - 1, N + 1, TL, Pointer_Wrapper>;
 	using next_pointer_type = Pointer_Wrapper<next_type>;
 	static const size_t Index = N;
-	static const size_t capacity= max_type_list_index<TL>::value;
+	static const size_t capacity= max_type_list_index<TL>::value + 1;
 	e_type value;
 	e_type& value_ref() { return value; }
 	operator e_type() { return value; }
@@ -335,6 +335,8 @@ struct element_ <false, N, TL, Pointer_Wrapper>
 
 	element_(e_type const& e) :value(e) {}
 
+	template<class En = std::enable_if_t<std::is_trivially_constructible_v<e_type>>>
+	element_() :element_(e_type()) {}
 
 	static const bool has_next = true;
 	~element_()
@@ -347,12 +349,14 @@ struct element_<true, N, TL, Pointer_Wrapper>
 	using e_type = typename select_type<N, TL>::type;
 
 	static const size_t Index = N;
-	static const size_t capacity = max_type_list_index<TL>::value;
+	static const size_t capacity = max_type_list_index<TL>::value + 1;
 
 	e_type value;
 	e_type& value_ref() { return value; }
 	operator e_type() { return value; }
 	element_(e_type const& e) :value(e) {}
+	template<class En = std::enable_if_t<std::is_trivially_constructible_v<e_type>>>
+	element_() : element_(e_type()) {}
 	static const bool has_next = false;
 };
 
@@ -369,7 +373,6 @@ using exp_shared_node = exp_node<std::shared_ptr, L...>;
 template<class Value_Type, class Current_Node_Type, class Constructor>
 typename Current_Node_Type::next_pointer_type create_next(Current_Node_Type & _no, Value_Type const& val, Constructor&& con_f)
 {
-	//static_assert(Current_Node_Type::has_next);
 	if constexpr (requires(Current_Node_Type cnt) { cnt.next; })
 	{
 		_no.next = con_f.template operator()<typename Current_Node_Type::next_type>(val);
@@ -423,6 +426,7 @@ template<class T>
 struct is_wrapped
 {
 	static const bool value = false;
+	using type = T;
 };
 
 template<template<class> class wrapper, class T>
@@ -448,20 +452,39 @@ struct reference_pointer_impl<T&>
 	reference_pointer_impl(T& ref) :ptr(&ref) {};
 	reference_pointer_impl(const reference_pointer_impl& rp) :ptr(rp.ptr) {};
 	operator T& () { return *ptr; }
+	operator T() { return *ptr; }
 	reference_pointer_impl& operator=(T& ref) { 
 		ptr = &ref; 
-		return *this; }
+		return *this;
+	}
 	reference_pointer_impl& operator=(T const& value) {
-		if (ptr) { *ptr = value; }
+		if (ptr) 
+			*ptr = value; 
 		return *this;
 	}
 	reference_pointer_impl& operator=(reference_pointer_impl const& value) {
-		ptr = value.ptr; return *this;
+		ptr = value.ptr; 
+		return *this;
 	}
+};
+template<class T>
+reference_pointer_impl<T&> const& exp_ref(T& ref) { return { ref }; }
+
+template<class T>
+struct remove_const_ref {
+	using type = T;
 };
 
 template<class T>
-using exp_reference_pointer = reference_pointer_impl<T>;
+struct remove_const_ref<const T&>
+{
+	using type = T&;
+};
+
+
+//note: T const& will be decayed as T&
+template<class T>
+using exp_reference_pointer = reference_pointer_impl<typename remove_const_ref<T>::type>;
 
 template<class RP, class T>
 struct reference_pointer_compatible
@@ -503,39 +526,30 @@ struct is_wrapped_with<wrapper1<T>, wrapper2> {
 };
 
 template<class X, class Y>
-struct assign_impl
-{
-	static const bool cond1 = std::is_same_v<X, Y>;
-	static const bool cond2 = is_wrapped<X>::value && std::is_same_v<typename is_wrapped<X>::type, Y>;
-	static const bool cond3 = is_wrapped<X>::value && RP_compatible<typename is_wrapped<X>::type, Y>;
-	static const bool value = (cond1 || cond2 || cond3);
-};
-
-template<class X, class Y>
-constexpr bool exp_assignable = assign_impl<X, Y>::value;
-
-template<class X, class Y>
 void exp_assign(X& x, Y const& y)
 {
-	if constexpr (exp_assignable<X, Y>)
+	if constexpr (requires(X _X, Y _Y) { _X = _Y; })
 	{
 		x = y;
 		return;
 	}
-	if constexpr (is_wrapped<Y>::value)
+	if constexpr (requires(X _x, Y _y) { _x.value; _x.value = _y; })
 	{
-		if constexpr (std::is_same_v<X, typename is_wrapped<Y>::type>)
-		{
-			if constexpr (requires(Y v) { v.value; })
-			{
-				x = y.value;
-				return;
-			}
-			std::cout << "warning:there is no Y::value, it is not a member of Y" << std::endl;
-		
-		}
+		x.value = y;
+		return;
 	}
-	std::cout << "warning:type dismatched:" << typeid(x).name() << "," << typeid(y).name() << std::endl;
+	if constexpr (requires(X _x, Y _y) { _y.value; x = _y.value; })
+	{
+		x = y.value;
+		return;
+	}
+	if constexpr (requires(X _X, Y _Y) { _X = (X)_Y; })
+	{
+		x = y;
+		return;
+	}
+	std::cout << "warning: type mismatched, assigning failed(did nothing) with:\n" 
+		"X = "<< typeid(x).name() << "\nY = " << typeid(y).name() << std::endl;
 }
 template<class _node, class T>
 void assign_at(_node& _n, T const& value, size_t idx)
@@ -605,6 +619,8 @@ void loop_with(_node& _n, func&& f, L...l)
 
 template<class T, class TL>
 constexpr bool is_in_list = exp_is_one_of<T, TL>::value;
+template<class T, class Exp_iter>
+T fetch_value(T& va, Exp_iter& it);
 
 template<class _node>
 struct exp_iterator
@@ -715,6 +731,7 @@ element_node < 0, exp_list<T, L...>, std::shared_ptr> make_element_node(auto&& c
 	(::push_back(first_node, l, constructor), ...);
 	return first_node;
 }
+
 template<class T>
 struct ref_wrapper
 {
@@ -723,7 +740,7 @@ struct ref_wrapper
 	ref_wrapper(const ref_wrapper& rw) :value(rw.value) {}
 	ref_wrapper& operator=(T const& v) { value = v; return *this; }
 	template<class U> requires RP_compatible<T, U>
-	ref_wrapper& operator=(U const& v) { value = v; return *this; }
+	ref_wrapper& operator=(U const& v) { exp_assign(*this, v); return *this; }
 	
 	ref_wrapper& operator=(const ref_wrapper& rw) { value = rw.value; return *this; }
 	//operator T& () { return value; }
@@ -736,7 +753,8 @@ struct ref_wrapper
 	}
 	friend std::ostream& operator<<(std::ostream& os, ref_wrapper<T>& rw)
 	{
-		os << rw.value;
+		if constexpr (requires(std::ostream & o, ref_wrapper<T> r) { o << r.value; })
+			os << rw.value;
 		return os;
 	}
 };
