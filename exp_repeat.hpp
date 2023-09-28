@@ -6,6 +6,11 @@
 
 namespace exp_repeat
 {
+	template<class attachable>
+	struct attach {
+		using attach_t = attachable;
+	};
+
 	template<class F, class ...L>
 	struct Meta_Invoke {
 		using type = F::template apply<L...>;
@@ -33,6 +38,7 @@ namespace exp_repeat
 
 	template<class _Idx>
 	using inc_idx_t = add_idx_t<_Idx, 1>;
+
 
 	template<size_t _stride_length>
 	struct _Stride {};
@@ -83,16 +89,28 @@ namespace exp_repeat
 	using meta_itoa = typename looper<true, _Appendable_Meta_List<exp_list<exp_repeat::Idx<0>>>,
 		_Increase_Idx, exp_repeat::Idx<0>>::apply<_Length_Less_Than<NUM>>::type::type;
 
+	template<size_t ..._NUM>
+	struct meta_array
+	{
+		using cv_typelist = exp_list<Idx<_NUM>...>;
+		template<size_t N> struct apply :exp_select<N, cv_typelist>
+		{};
+	};
+
+	template<class TL>
+	struct _Meta_To_Array{};
+
+	template<template<class...> class TL, size_t... _I>
+	struct  _Meta_To_Array<TL<Idx<_I>...>>
+	{
+		using type = meta_array<_I...>;
+	};
+
+	template<class TL>
+	using meta_to_array =typename _Meta_To_Array<TL>::type;
+
 	namespace invoke
 	{
-		template<size_t ..._NUM>
-		struct meta_array
-		{
-			using cv_typelist = exp_list<Idx<_NUM>...>;
-			template<size_t N> struct apply :exp_select<N, cv_typelist>
-			{};
-		};
-
 		template<size_t _Idx, class _Node>
 		exp_select<_Idx, typename _Node::element_type_list> get_from_node(_Node& node)
 		{
@@ -136,5 +154,39 @@ namespace exp_repeat
 		typename decltype(
 			exp_bind::bind(fn)
 			)::argument_list_type, std::shared_ptr>;
+
+	template<class ...>
+	struct Meta_Expr {};
+	template<class _Idx1, class _OP, class _Idx2>
+	struct Meta_Expr<_Idx1, _OP, _Idx2> {
+		using type = meta_invoke<_OP, _Idx1, _Idx2>;
+	};
+	namespace operators{
+
+		template<const char _O> struct Meta_Op {};
+		template<> struct Meta_Op<'+'> {
+			template<class X, class Y>
+			using apply = Idx<X::value + Y::value>;
+		};
+		template<> struct Meta_Op<'-'> {
+			template<class X, class Y>
+			using apply = Idx<X::value - Y::value>;
+		};
+		template<> struct Meta_Op<'*'> {
+			template<class X, class Y>
+			using apply = Idx<X::value * Y::value>;
+		};
+		template<> struct Meta_Op<'>'> {
+			template<class X, class Y>
+			struct apply { static const bool value = (X::value > Y::value); };
+		};
+		using plus = Meta_Op<'+'>;
+		using sub = Meta_Op<'-'>;
+		using mul = Meta_Op<'*'>;
+		using greater = Meta_Op<'>'>;
+	}
+
+	template<class ...L>
+	using meta_expr = typename Meta_Expr<L...>::type;
 
 }

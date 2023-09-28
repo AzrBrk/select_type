@@ -14,6 +14,14 @@ struct ref_wrapper;
 
 template<class ...Arg_t>
 struct exp_list {};
+template<class T, class TL>
+struct add_to_front {};
+
+template<class T, template<class...> class TL, class ...L>
+struct add_to_front<T, TL<L...>>
+{
+	using type = TL<T, L...>;
+};
 
 template<size_t N, class L>
 struct type_list_size {
@@ -870,12 +878,18 @@ struct inserter {
 template<class TL, class Inserter>
 struct insert_at_impl
 {
-	using front = sub_type_list<Inserter::value + 1, TL>;
-	using back = experiment::exp_ignore_until<Inserter::value, TL>;
+	using front = sub_type_list<Inserter::value, TL>;
+	using back = experiment::exp_ignore_until<Inserter::value - 1, TL>;
 	using type = typename exp_join_a_lot<front,
 		exp_list<typename Inserter::type>,
 		back>::type;
 };
+template<class TL, template<size_t, class> class Inserter, class T>
+struct insert_at_impl <TL, Inserter<0, T>>
+{
+	using type = typename add_to_front<T, TL>::type;
+};
+
 template<class TL, class Inserter>
 using insert_at = typename insert_at_impl<TL, Inserter>::type;
 template<bool cnd, class A, class B>
@@ -886,3 +900,24 @@ template<class A, class B>
 struct condition_select_impl<false, A, B> { using type = B; };
 template<bool cnd, class A, class B>
 using exp_if = typename condition_select_impl<cnd, A, B>::type;
+
+
+template<class _idx_t, class T>
+struct TL_inserter
+{
+	using type = inserter<_idx_t::value, T>;
+	template<class TL>
+	using apply = insert_at<TL, type>;
+};
+
+template<class _idx_t>
+struct TL_deleter
+{
+	template<class TL> using apply =exp_list<exp_select<_idx_t::value, TL>, typename experiment::erase_at_t<_idx_t::value, TL>::type>;
+};
+
+template<size_t ..._indices>
+struct exp_select_list
+{
+	template<class TL> using apply = exp_list<exp_select<_indices, TL>...>;
+};
