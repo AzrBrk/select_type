@@ -6,10 +6,6 @@
 
 namespace exp_repeat
 {
-	template<class attachable>
-	struct attach {
-		using attach_t = attachable;
-	};
 
 	template<class F, class ...L>
 	struct Meta_Invoke {
@@ -26,6 +22,11 @@ namespace exp_repeat
 
 	template<class _Idx, size_t _I>
 	struct Add_Idx {};
+
+	template<size_t _idx, class attach> struct idx_attached : Idx<_idx>
+	{
+		using type = attach;
+	};
 
 	template<template<size_t> class _Idx, size_t _I_in_Idx, size_t _I>
 	struct Add_Idx<_Idx<_I_in_Idx>, _I>
@@ -180,13 +181,21 @@ namespace exp_repeat
 			template<class X, class Y>
 			struct apply { static const bool value = (X::value > Y::value); };
 		};
+		template<> struct Meta_Op<'='> {
+			template<class X, class Y>
+			struct apply { static const bool value = (X::value == Y::value); };
+		};
 		using plus = Meta_Op<'+'>;
 		using sub = Meta_Op<'-'>;
 		using mul = Meta_Op<'*'>;
-		using greater = Meta_Op<'>'>;
+		using greater = Meta_Op<'>'>;	
+		using equal = Meta_Op<'='>;
 	}
 
 	template<class ...L>
 	using meta_expr = typename Meta_Expr<L...>::type;
+
+	template<class ...L>
+	using meta_expr_string = Meta_Expr<L...>;
 
 }

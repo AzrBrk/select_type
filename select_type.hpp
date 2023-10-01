@@ -25,7 +25,7 @@ struct add_to_front<T, TL<L...>>
 
 template<size_t N, class L>
 struct type_list_size {
-	static const size_t value = N + 1;
+	//static const size_t value = 0;
 };
 
 template<size_t N, template<class...> class TL, class T, class ...L>
@@ -38,6 +38,11 @@ template<size_t N, template<class...> class TL, class T>
 struct type_list_size<N, TL<T>>
 {
 	static const size_t value = N + 1;
+};
+template<size_t N, template<class...> class TL>
+struct type_list_size<N, TL<>>
+{
+	static const size_t value = 0;
 };
 template<class L>
 using size_of_type_list = type_list_size<0, L>;
@@ -61,7 +66,8 @@ struct max_type_list_index
 };
 template<class L>
 struct split_first
-{};
+{
+};
 
 template<template<class...> class TL, class T, class ...L>
 struct split_first<TL<T, L...>>
@@ -534,7 +540,7 @@ struct is_wrapped_with<wrapper1<T>, wrapper2> {
 };
 
 template<class X, class Y>
-void exp_assign(X& x, Y const& y)
+void exp_assign(X& x, Y&& y)
 {
 	if constexpr (requires(X _X, Y _Y) { _X = _Y; })
 	{
@@ -546,16 +552,21 @@ void exp_assign(X& x, Y const& y)
 		x.value = y;
 		return;
 	}
+	if constexpr (requires(X _x, Y _y) { _x.value.value; _x.value.value = _y; })
+	{
+		x.value.value = y;
+		return;
+	}
 	if constexpr (requires(X _x, Y _y) { _y.value; x = _y.value; })
 	{
 		x = y.value;
 		return;
 	}
-	if constexpr (requires(X _X, Y _Y) { _X = (X)_Y; })
-	{
-		x = y;
-		return;
-	}
+	//if constexpr (requires(X _X, Y _Y) { _X = (X)_Y; })
+	//{
+	//	x = y;
+	//	return;
+	//}
 	std::cout << "warning: type mismatched, assigning failed(did nothing) with:\n" 
 		"X = "<< typeid(x).name() << "\nY = " << typeid(y).name() << std::endl;
 }
@@ -636,6 +647,11 @@ struct exp_iterator
 	_node& first_node;
 	size_t exp_index{ 0 };
 
+	exp_iterator& operator++() {
+		++exp_index;
+		return *this;
+	}
+
 
 	exp_iterator(_node& _n) :first_node(_n) {}
 
@@ -644,6 +660,24 @@ struct exp_iterator
 	T operator=(T const& value) { 
 		assign_at(first_node, value, exp_index); 
 		return value; 
+	}
+	exp_iterator& operator*() { return *this; }
+	exp_iterator<_node> begin() { 
+		exp_iterator<_node> beg{ first_node }; 
+		beg[0];
+		return beg;
+	}
+	exp_iterator<_node> end() { 
+		exp_iterator<_node> beg{ first_node }; 
+		beg[size()];
+		return beg;
+	}
+	template<
+		class it_type,
+		class En = std::enable_if_t<is_wrapped_with<it_type, exp_iterator>::value>
+	>
+	bool operator !=(it_type another) { 
+		return this->exp_index != another.exp_index;
 	}
 	template<class T, 
 		class En = std::enable_if_t<
@@ -669,10 +703,6 @@ struct exp_iterator
 		auto node_transfer = [this](auto const& value) {(*this) = value; };
 		do_at(it.first_node, node_transfer, it.exp_index);
 		return *this;
-	}
-	void operator++()
-	{
-		++exp_index;
 	}
 	exp_iterator<_node>& operator[](size_t i) 
 	{
@@ -711,8 +741,9 @@ struct exp_iterator
 	}
 	friend std::ostream& operator <<(std::ostream& os, exp_iterator<_node>& _n)
 	{
-		auto output = [&os](auto& value)->void
+		auto output = [&os]<class VT>(VT& value)->void
 			{
+			if constexpr (requires(VT vt, std::ostream & oos) { oos << vt; })
 				os << value;
 			};
 		do_at(_n.first_node, output, _n.exp_index);
@@ -747,11 +778,10 @@ struct ref_wrapper
 	ref_wrapper(T& _v) :value(_v) {};
 	ref_wrapper(const ref_wrapper& rw) :value(rw.value) {}
 	ref_wrapper& operator=(T const& v) { value = v; return *this; }
-	template<class U> requires RP_compatible<T, U>
-	ref_wrapper& operator=(U const& v) { exp_assign(*this, v); return *this; }
+	template<class U,class En = std::enable_if_t<!std::is_same_v<T, U>>>
+	ref_wrapper& operator=(U const& v) { exp_assign(value, v); return *this; }
 	
 	ref_wrapper& operator=(const ref_wrapper& rw) { value = rw.value; return *this; }
-	//operator T& () { return value; }
 	operator T () { return value; }
 	friend std::istream& operator>>(std::istream& is, ref_wrapper<T>& rw)
 	{
