@@ -7,13 +7,25 @@
 #include<functional>
 #include<memory>
 
+#define compilet_var static const
+#define compilet_bool static const bool
 
 struct shared_constructor;
 template<class T>
 struct ref_wrapper;
 
 template<class ...Arg_t>
-struct exp_list {};
+struct exp_list {
+	static constexpr size_t length = sizeof...(Arg_t);
+	template<template<class...> class TL> using to = TL<Arg_t...>;
+};
+
+template<class TL> struct to_exp_list {};
+
+template<template<class ...> class TL, class ...Typs> struct to_exp_list<TL<Typs...>>
+{
+	using type = exp_list<Typs...>;
+};
 template<class T, class TL>
 struct add_to_front {};
 
@@ -23,29 +35,19 @@ struct add_to_front<T, TL<L...>>
 	using type = TL<T, L...>;
 };
 
-template<size_t N, class L>
-struct type_list_size {
-	//static const size_t value = 0;
-};
-
-template<size_t N, template<class...> class TL, class T, class ...L>
-struct type_list_size < N, TL<T, L...>>
-{
-	static const size_t value = type_list_size<N + 1, TL<L...>>::value;
-};
-
-template<size_t N, template<class...> class TL, class T>
-struct type_list_size<N, TL<T>>
-{
-	static const size_t value = N + 1;
-};
-template<size_t N, template<class...> class TL>
-struct type_list_size<N, TL<>>
+template<class TL>
+struct type_list_size
 {
 	static const size_t value = 0;
 };
+
+template<template<class...> class TL, class ...L>
+struct type_list_size<TL<L...>>
+{
+	static const size_t value = sizeof...(L);
+};
 template<class L>
-using size_of_type_list = type_list_size<0, L>;
+using size_of_type_list = type_list_size<L>;
 
 template<class T>
 struct is_empty_list
@@ -64,6 +66,8 @@ struct max_type_list_index
 {
 	static constexpr auto value = size_of_type_list<T>::value - 1;
 };
+
+struct end_of_list {};
 template<class L>
 struct split_first
 {
@@ -75,6 +79,12 @@ struct split_first<TL<T, L...>>
 	using first = T;
 	using rest = TL<L...>;
 	using type = TL<T, L...>;
+};
+template<template<class...> class TL>
+struct split_first<TL<>>
+{
+	using first = end_of_list;
+	using rest = end_of_list;
 };
 
 template<size_t I>
@@ -538,28 +548,33 @@ template<template<class...> class wrapper1, template<class...> class wrapper2, c
 struct is_wrapped_with<wrapper1<T>, wrapper2> {
 	static const bool value = std::is_same<wrapper1<T>, wrapper2<T>>::value;
 };
+template<template<class...> class wrapper1, template<class...> class wrapper2, class ...T>
+struct is_wrapped_with<wrapper1<T...>, wrapper2> : std::conjunction<is_wrapped_with<wrapper1<T>,wrapper2>...>
+{};
+template<class Ty1, template<class...> class Ty2>
+constexpr bool is_wrapped_with_v = is_wrapped_with<Ty1, Ty2>::value;
 
 template<class X, class Y>
 void exp_assign(X& x, Y&& y)
 {
 	if constexpr (requires(X _X, Y _Y) { _X = _Y; })
 	{
-		x = y;
+		x = std::move(y);
 		return;
 	}
 	if constexpr (requires(X _x, Y _y) { _x.value; _x.value = _y; })
 	{
-		x.value = y;
+		x.value = std::move(y);
 		return;
 	}
 	if constexpr (requires(X _x, Y _y) { _x.value.value; _x.value.value = _y; })
 	{
-		x.value.value = y;
+		x.value.value = std::move(y);
 		return;
 	}
 	if constexpr (requires(X _x, Y _y) { _y.value; x = _y.value; })
 	{
-		x = y.value;
+		x = std::move(y.value);
 		return;
 	}
 	//if constexpr (requires(X _X, Y _Y) { _X = (X)_Y; })
@@ -587,7 +602,7 @@ void assign_at(_node& _n, T const& value, size_t idx)
 }
 
 template<class _node, class func, class...L>
-void do_at(_node& _n, func&& f, size_t idx, L...l)
+void do_at(_node& _n, func&& f, size_t idx, L&&...l)
 {
 	if (!idx) {
 		f(_n.value_ref(), std::forward<L>(l)...);
@@ -605,7 +620,7 @@ void do_at(_node& _n, func&& f, size_t idx, L...l)
 	}
 }
 template<class _node, class func, class...L>
-void do_with_node_at(_node& _n, func&& f, size_t idx, L...l)
+void do_with_node_at(_node& _n, func&& f, size_t idx, L&&...l)
 {
 	if (!idx) { 
 		f(_n, std::forward<L>(l)...);
@@ -624,7 +639,7 @@ void do_with_node_at(_node& _n, func&& f, size_t idx, L...l)
 }
 
 template<class _node, class func, class...L>
-void loop_with(_node& _n, func&& f, L...l)
+void loop_with(_node& _n, func&& f, L&&...l)
 {
 	f(_n.value, l...);
 	if constexpr (_node::has_next == true)
@@ -922,6 +937,8 @@ struct insert_at_impl <TL, Inserter<0, T>>
 
 template<class TL, class Inserter>
 using insert_at = typename insert_at_impl<TL, Inserter>::type;
+
+
 template<bool cnd, class A, class B>
 struct condition_select_impl {};
 template<class A, class B>
@@ -951,3 +968,22 @@ struct exp_select_list
 {
 	template<class TL> using apply = exp_list<exp_select<_indices, TL>...>;
 };
+struct no_exist_type {};
+
+template<class T, class U = std::void_t<>>
+struct get_type_impl : std::false_type
+{
+	using type = no_exist_type;
+};
+
+template<class T>
+struct get_type_impl<T, std::void_t<typename T::type>> : std::true_type
+{
+	using type = typename T::type;
+};
+
+template<class T>
+using get_type = typename get_type_impl<T>::type;
+
+template<class T>
+constexpr bool has_type = get_type_impl<T>::value;

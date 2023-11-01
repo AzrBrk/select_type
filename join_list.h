@@ -3,15 +3,7 @@
 
 namespace exp_bind
 {
-	template<class T, class TL>
-	struct add_to_front {};
-
-	template<class T, template<class...> class TL, class ...L>
-	struct add_to_front<T, TL<L...>>
-	{
-		using type = TL<T, L...>;
-	};
-
+	
 	template<class TL>
 	struct typelist_to_fn
 	{};

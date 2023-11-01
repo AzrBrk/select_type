@@ -87,7 +87,7 @@ namespace exp_bind{
 		}
 
 		template<class T>
-		void bind(T val)
+		void bind(T &&val)
 		{
 			auto& iter = args_iter_keep.iterator();
 			if (current_index >= iter.size()) return;
@@ -208,6 +208,7 @@ namespace exp_bind{
 
 	template<auto x>
 	using make_binder = exp_function_binder<remove_pointer<decltype(x)>>;
+
 	template<class T, class R, class ...L>
 	member_function_wrapper(T& obj, decl_mem_type<T, R, L...> mf) -> member_function_wrapper<T, R(T::*)(L...)>;
 

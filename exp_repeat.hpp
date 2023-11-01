@@ -118,6 +118,18 @@ namespace exp_repeat
 			exp_select<_Idx, typename _Node::element_type_list> val{};
 			return fetch_value(val, exp_iterator<_Node>(node)[_Idx]);
 		}
+		template<size_t _Idx, class _Node>
+		exp_select<_Idx, typename _Node::element_type_list>& ref_from_node(_Node& node)
+		{
+			using ref_type = exp_select<_Idx, typename _Node::element_type_list>&;
+			exp_reference_pointer<ref_type> erp{};
+			auto get_ref = [&erp]<class vt>(vt& value) {
+				if constexpr (requires(vt& v){erp = v; })
+					erp = value;
+			};
+			do_at(node, get_ref, _Idx);
+			return (ref_type)erp;
+		}
 
 		template<template<size_t ...> class _Meta_Array, class F, class _Node, size_t ...idxs>	
 		auto node_invoke(_Meta_Array<idxs...> metas, _Node& node, F&& f)

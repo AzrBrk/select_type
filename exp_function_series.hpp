@@ -84,6 +84,18 @@ namespace exp_function_series
 			++series_index;
 			return *this;
 		}
+		//clear argument count index
+		void clear_all_argc_idx()
+		{
+			auto clear_argc_f = []<class EFB>(EFB& efb)
+				{
+				if constexpr (requires(EFB e) { e.reset_argc_stack(); })
+				{
+					efb.reset_argc_stack();
+				}
+				};
+			loop_with(func_nodes, clear_argc_f);
+		}
 		//bind arguments for current stage function
 		template<class ...Args>
 		void bind(Args...args)
@@ -169,8 +181,7 @@ namespace exp_function_series
 		//get functions counts
 		size_t size() { return func_iter.size(); }
 	};
-	template<class Node>
-	struct transform_node_to_series_type
+	template<class Node> struct transform_node_to_series_type
 	{
 		using type = typename exp_rename<typename Node::element_type_list, series>::type;
 	};
@@ -189,8 +200,8 @@ namespace exp_function_series
 
 	template<class T>
 	using rem_ref = typename std::remove_reference<T>::type;
-	template<class ...EFBS>
-	auto link_funcs(EFBS&& ...efbs)
+
+	template<class ...EFBS> auto link_funcs(EFBS&& ...efbs)
 	{
 		using remove_rf_f =typename exp_apply<exp_list<EFBS...>, rem_ref>::type;
 		using series_type = typename exp_rename<remove_rf_f, series>::type;
@@ -198,22 +209,28 @@ namespace exp_function_series
 		return efb_series;
 	}
 	//link argument typelist to a common node
-	template<class ...EFBS>
-	auto link_arguments(series<EFBS...>& efb_series)
+	template<class ...EFBS> auto link_arguments(series<EFBS...>& efb_series)
 	{
-		auto func_impl = []<class ...L>(L*...l) { return link_a_lot_tuples((*l)...); };
-		auto make_func_impl = [&func_impl]<template<class...> class typelist, class ...L>(typelist<L...> tl)
-		{
+		auto func_impl = []<class ...L>(L*...l) {
+			return link_a_lot_tuples((*l)...);
+		};
+
+		auto make_func_impl = [&func_impl]<template<class...> class typelist, class ...L>(typelist<L...> tl){
 			return [&func_impl](L*...l) { return func_impl.template operator()(l...); };
 		};
 
 		using tl_type = typename series_types<EFBS...>::tuples_type;
+
 		tl_type tl{};
+
 		exp_function_binder bind_efb = exp_bind::bind(make_func_impl(tl));
 
-		auto bind_func = [&bind_efb](auto& value) {bind_efb.bind(&(value.args_stack)); };
+		auto bind_func = [&bind_efb](auto& value) {
+			bind_efb.bind(&(value.args_stack)); 
+			};
 
 		loop_with(*efb_series, bind_func);
+
 		return bind_efb.apply_func();
 	}
 	//launch links
@@ -233,13 +250,19 @@ namespace exp_function_series
 	void series_bind(Series& srs, L ...l)
 	{
 		auto argc_node = link_arguments(srs);
-		auto set_argc = [&srs]<class ...AL>(auto & node, AL&&...al) { srs.argc_index += set_node(node, al...); };
+
+		auto set_argc = [&srs]<class ...AL>(auto & node, AL&&...al) { 
+			srs.argc_index += set_node(node, al...); 
+		};
+
 		do_with_node_at(argc_node, set_argc, srs.argc_index, std::forward<L>(l)...);
 	}
 	template<class T, class ...F>
 	auto object_series(T* obj, F ...f) -> decltype(auto)
 	{
-		auto make_bind = [&obj](auto&& mf) {return exp_bind::bind(*obj, mf); };
+		auto make_bind = [&obj](auto&& mf) {
+			return exp_bind::bind(*obj, mf); 
+			};
 		return link_efb(make_bind(f)...);
 	}
 
@@ -248,14 +271,18 @@ namespace exp_function_series
 	{
 		exp_function_binder efb{ bind(object_series<T, F...>) };
 		efb.bind_a_lot((T*)nullptr, fs...);
+
 		return efb;
 	}
 	template<class T, class ...F>
 	struct link_object
 	{
 		using class_type = T;
+
 		T* obj_pointer{ nullptr };
+
 		decltype(exp_bind::bind(object_series<T, F...>)) link_efb;
+
 		link_object(F...fs) :link_efb(bind_impl<T>(fs...)) {};
 		template<class ...Args>
 		auto operator()(T* ptr, Args...args)
