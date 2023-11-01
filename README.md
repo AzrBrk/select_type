@@ -400,6 +400,87 @@ Three `student` objects, `A`, `B`, and `C`, are created. The `s_lo` object is th
 
 Finally, a loop is used to print out the information of each student using the `get_name()`, `get_id()`, and `get_score()` member functions.
 
+#### The Reflex Map
+
+The `link_object` class in the header file "exp_function_series.hpp" has more functionality than just `_continue()`, which executes all the functions in a series. It also provides full control over the order of function execution. The `reflex_map` class in the header file "exp_reflex.hpp" is a class that quickly reflexes a class as a console interactive program, based on the `link_object` class. By making slight modifications to our `student` class, we can utilize the `reflex_map` to write a console interactive program.
+
+The following program reads your commands to create a `student` instance. By using the command 'save', you can store the instance in a `std::vector`. At the end of the program, it displays what you created.
+
+```cpp
+#include <iostream>
+#include "exp_function_series.hpp"
+#include "exp_reflex.hpp"
+#include <vector>
+
+using namespace exp_function_series;
+using namespace exp_reflex;
+using namespace std::literals;
+
+class student {
+public:
+	explicit student() noexcept {}
+
+	void set_name(std::string n) { name = n; }
+	void set_score(int sc) { score = sc; }
+	void set_id(unsigned int id) { ID = id; }
+	void save() {
+		stu_vec.push_back(*this);
+	}
+
+	std::string get_name() const { return name; }
+	double get_score() const { return score; }
+	unsigned int get_id() const { return ID; }
+
+	static auto student_series() {
+		return link_object{
+			&student::set_name,
+			&student::set_id,
+			&student::set_score,
+			&student::save
+		};
+	}
+
+	std::vector<student> stu_vec{};
+private:
+	std::string name{};
+	double score{};
+	unsigned int ID{};
+};
+
+int main() {
+	student x{};
+	reflex_map student_console{ student::student_series(), x };
+
+	// Define the commands of our student console program
+	student_console.reflex_as("name"s, "id"s, "score"s, "save"s);
+
+	// The rm_input function returns a lambda function that reads input from std::istream base class.
+    // By default, it reads from std::cin, but you can also read from a file stream or other std stream.
+    // It will automatically recognize your command and apply your argument to the correct corresponding function.
+	auto ipt = rm_input(student_console);
+	while (ipt()) {}
+
+	for (const auto& i : x.stu_vec) {
+		std::cout << "student: '" << i.get_name() << "' ID: " << i.get_id() << " score: " << i.get_score() << "\n";
+	}
+}
+```
+
+Here's the input/output of our small console program. The order in which you code your commands doesn't matter; the input lambda function will find the correct function based on the order of your reflexing.
+
+```
+name Tomcat
+score 78.5
+id 10008
+save
+id 10006
+score 89.5
+name Sherry Porter
+save
+exit
+student: 'Tomcat' ID: 10008 score: 78.5
+student: 'Sherry Porter' ID: 10006 score: 89.5
+```
 
 
 
