@@ -332,6 +332,71 @@ The `_bind_continue()` function is called to execute the entire series of functi
 
 Finally, the result of the final function is obtained using the `final_return()` function and printed to the console.
 
+### The `link_object` Class
 
+The `link_object` class is a specialized function series designed for member functions. It accepts a series of member functions from the same class. Once the series is created, it can be used to generate a sequence of callable functions by accepting a pointer to an instance of the class.
+
+In the provided code snippet, the `link_object` class is used to perform delayed construction of three `student` objects.
+
+```cpp 
+#include <iostream>
+#include "exp_function_series.hpp"
+
+using namespace exp_function_series;
+using namespace std::literals;
+
+class student
+{
+public:
+	explicit student() noexcept {}
+
+	void set_name(std::string n) { name = n; }
+	void set_score(int sc) { score = sc; }
+	void set_id(unsigned int id) { ID = id; }
+
+	std::string get_name() const { return name; }
+	double get_score() const { return score; }
+	unsigned int get_id() const { return ID; }
+
+	static auto student_series()
+	{
+		return link_object{
+			&student::set_name,
+			&student::set_id,
+			&student::set_score
+		};
+	}
+
+private:
+	std::string name{};
+	double score{};
+	unsigned int ID{};
+};
+
+
+int main()
+{
+	auto s_lo = student::student_series();
+	student A{}, B{}, C{};
+	s_lo(&A, "Tom"s, 10000, 88.7);
+	s_lo(&B, "Sherry"s, 10001, 89.4);
+	s_lo(&C, "Marry"s, 10002, 99.9);
+
+	for (const auto& i : { A, B, C })
+	{
+		std::cout << "Student: " << i.get_name() << " ID: " << i.get_id() << " Score: " << i.get_score() << '\n';
+	}
+}
+```
+
+In the updated code:
+
+- The `student` class represents a student with various member functions for setting and getting information.
+- The `student_series()` static member function of the `student` class returns a `link_object` instance, which is created by passing the member functions `set_name`, `set_id`, and `set_score` to the `link_object` constructor.
+- In the `main()` function, `s_lo` is an instance of `link_object` created using `student::student_series()`.
+- Three `student` objects, `A`, `B`, and `C`, are created. The `s_lo` object is then used to call the member functions on each student object, providing the corresponding arguments.
+- Finally, a loop is used to print out the information of each student using the `get_name()`, `get_id()`, and `get_score()` member functions.
+
+Please let me know if you have any further questions or need additional assistance!
 
 
