@@ -211,4 +211,127 @@ The second example demonstrates binding a lambda function. The lambda takes an i
 The third example shows binding a member function. An instance of the `X` struct is created, and its member function `foo` is bound using `exp_function_binder`. The result of calling the binder with an argument of `12` is printed.
 
 
+### Binding a lambda or functor template
+
+To create a binder for a lambda or functor template, you need to specify the template arguments. You will need to use the `realize_meta` function from the `function_impl.hpp` file.
+
+```cpp
+#include <iostream>
+#include "exp_function_binder.hpp"
+#include "function_impl.hpp"
+
+using namespace exp_bind;
+using namespace function_impl;
+
+int main()
+{
+    auto f = []<class ...Args>(Args ...args)
+    {
+        ((std::cout << args << ' '), ...);
+    };
+
+    // Note that `realize_meta` takes a type list, not raw types, as template arguments
+    auto efb = exp_bind::bind(realize_meta<exp_list<int, double, char>>(f));
+
+    efb(1, 2.33, 'c');
+
+    return 0;
+}
+```
+
+In this code snippet, a lambda function `f` is defined with a variadic template parameter `Args`. The lambda function prints all the arguments passed to it using fold expressions. 
+
+To bind `f` using `exp_function_binder`, the `realize_meta` function is used to convert the template arguments into a type list (`exp_list<int, double, char>`). Then, the `bind` function is called with the realized type list and the lambda function `f`.
+
+Finally, the `efb` binder is called with arguments `1`, `2.33`, and `'c'`, resulting in the values being printed to the console.
+
+
+## Function Series
+
+The `exp_function_series` class is capable of creating a series of functions, even if they are in completely different forms. Here's an example to demonstrate its usage:
+
+```cpp
+#include <iostream>
+#include "exp_function_series.hpp"
+
+using namespace exp_function_series;
+
+// A factory function to create a function series
+// Trust me, you don't want to write down its type yourself
+using exp_function_series::link_f;
+
+int main()
+{
+    auto my_series = link_f(
+        [](int a, double b) { return b - a; },
+        [](double c) { return std::to_string(c); },
+        []() { std::cout << "end\n"; }
+    );
+
+    // Use `series_bind` function to bind arguments to the function series
+    series_bind(my_series, 1, 1.33, 0.33);
+    
+    // Use `_continue()` to execute the whole series
+    my_series._continue();
+
+    // The function series returns a tuple that contains all the return values from the functions in the series
+    // You can use structured binding to get the result. Note that if a function returns void, it will return `(void*)0`,
+    // so you have to add a placeholder for that result.
+    auto [first, second, v] = my_series._return();
+
+    std::cout << first << " " << second << '\n';
+}
+```
+
+In the above code snippet, the `exp_function_series` class is used to create a series of functions. The `link_f` function is used as a factory function to create the function series. Multiple lambda functions representing different steps of the series are passed as arguments to `link_f`.
+
+The `series_bind` function is used to bind the necessary arguments to the function series. In this example, the arguments `1`, `1.33`, and `0.33` are bound.
+
+The `_continue()` function is called to execute the entire series of functions.
+
+The function series returns a tuple containing the return values from each function in the series. Structured binding is used to retrieve the individual results, and in the case of a function returning void, a placeholder is used.
+
+Finally, the results are printed to the console.
+
+### Connecting Functions in the Series
+
+The previous example demonstrates how to create and use a function series to get its result, but it doesn't show the connection between the functions inside the series. Instead of using the member function `_continue()`, the `_bind_continue()` member function automatically binds the return value from the last function and proceeds with the execution. The `final_return()` function returns the result of the final function:
+
+```cpp
+#include <iostream>
+#include "exp_function_series.hpp"
+
+using namespace exp_function_series;
+
+// A factory function to create a function series
+// Trust me, you don't want to write down its type yourself
+using exp_function_series::link_f;
+
+int main()
+{
+    auto my_series = link_f(
+        [](int a, double b) { return b - a; },
+        [](double c) { return std::to_string(c); }
+    );
+    
+    // This only binds arguments to the first function in the series
+    my_series.bind(1, 1.33);
+
+    // The return value of the first function will automatically be bound to the stack of the second function
+    my_series._bind_continue();
+
+    std::cout << my_series.final_return() << '\n'; // Output: 0.330000
+}
+```
+
+In this example, the `exp_function_series` class is used to create a series of functions. The `link_f` function is again used as a factory function to create the function series. Two lambda functions representing different steps of the series are passed as arguments to `link_f`.
+
+The `bind()` function is used to bind the necessary arguments to the first function in the series. In this example, the arguments `1` and `1.33` are bound.
+
+The `_bind_continue()` function is called to execute the entire series of functions. It binds the return value from the first function to the second function and then proceeds with the execution.
+
+Finally, the result of the final function is obtained using the `final_return()` function and printed to the console.
+
+
+
 
