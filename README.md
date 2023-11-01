@@ -389,14 +389,17 @@ int main()
 }
 ```
 
-In the updated code:
 
-- The `student` class represents a student with various member functions for setting and getting information.
-- The `student_series()` static member function of the `student` class returns a `link_object` instance, which is created by passing the member functions `set_name`, `set_id`, and `set_score` to the `link_object` constructor.
-- In the `main()` function, `s_lo` is an instance of `link_object` created using `student::student_series()`.
-- Three `student` objects, `A`, `B`, and `C`, are created. The `s_lo` object is then used to call the member functions on each student object, providing the corresponding arguments.
-- Finally, a loop is used to print out the information of each student using the `get_name()`, `get_id()`, and `get_score()` member functions.
+The `student` class represents a student with various member functions for setting and getting information.
 
-Please let me know if you have any further questions or need additional assistance!
+The `student_series()` static member function of the `student` class returns a `link_object` instance, which is created by passing the member functions `set_name`, `set_id`, and `set_score` to the `link_object` constructor.
+
+In the `main()` function, `s_lo` is an instance of `link_object` created using `student::student_series()`.
+
+Three `student` objects, `A`, `B`, and `C`, are created. The `s_lo` object is then used to call the member functions on each student object, providing the corresponding arguments.
+
+Finally, a loop is used to print out the information of each student using the `get_name()`, `get_id()`, and `get_score()` member functions.
+
+
 
 
