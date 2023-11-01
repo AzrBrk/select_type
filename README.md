@@ -145,3 +145,70 @@ In this code snippet, the `operatable.hpp` file provides the operators required 
 The code creates an `exp_iterator` using an element node created with `make_element_node` and initialized with values `1`, `2.3`, and `'c'`. It then enters a `while` loop, incrementing the value at index `0` until it reaches `10`. Inside the loop, it prints out the elements of the iterator.
 
 
+## The `exp_function_binder` class
+
+The `exp_function_binder` class is a function binder that uses `exp_node` as the function arguments stack and binds arguments to a function. It is defined in the `exp_bind` namespace.
+
+Unlike `std::function`, the `exp_function_binder` keeps the arguments within itself and does not create an extra binding object:
+
+```cpp
+#include <iostream>
+#include "exp_function_binder.hpp"
+
+using namespace exp_bind;
+
+int foo(int i) { return i; }
+
+struct X
+{
+    int foo(int i) { return i; }
+};
+
+int main()
+{
+    {
+        // Binding a function
+        exp_function_binder efb{ foo };
+        efb.bind(10);
+
+        std::cout << efb() << '\n';
+
+        // You can also change the bound argument in a function
+        efb[0] = 3;
+        std::cout << "Argument changed to 3: " << efb() << '\n';
+
+        // You can also undo the binding operation using counts
+        // Note that once the function is called, the counter for the binder is reset
+        efb.bind(0);
+        efb.rebind_back(1);
+        std::cout << efb(4) << '\n';
+    }
+
+    {
+        // Binding a lambda
+        auto efb = exp_bind::bind([](int i) { return i; });
+        std::cout << efb(11) << '\n';
+    }
+
+    {
+        // Binding a member function
+        // This takes a reference to an object because that's how it works in C++
+        X x{};
+        auto efb = exp_bind::bind(x, &X::foo);
+        std::cout << efb(12) << '\n';
+    }
+
+    return 0;
+}
+```
+
+In this code snippet, the `exp_function_binder.hpp` file provides the definition for the `exp_function_binder` class in the `exp_bind` namespace. It demonstrates various examples of binding functions, lambdas, and member functions.
+
+The first example binds a regular function `foo` using `exp_function_binder`. The bound argument is set to `10`, and the result of calling the function is printed. The bound argument is then changed to `3`, and the function is called again to show the updated result. Lastly, the binding operation is undone using counts, and the function is called with a different argument (`4`).
+
+The second example demonstrates binding a lambda function. The lambda takes an integer argument and returns it as the result. The lambda function is bound to an `exp_function_binder` object, and the result of calling the binder with an argument of `11` is printed.
+
+The third example shows binding a member function. An instance of the `X` struct is created, and its member function `foo` is bound using `exp_function_binder`. The result of calling the binder with an argument of `12` is printed.
+
+
+
