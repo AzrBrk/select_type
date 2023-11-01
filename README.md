@@ -455,8 +455,8 @@ int main() {
 	student_console.reflex_as("name"s, "id"s, "score"s, "save"s);
 
 	// The rm_input function returns a lambda function that reads input from std::istream base class.
-    // By default, it reads from std::cin, but you can also read from a file stream or other std stream.
-    // It will automatically recognize your command and apply your argument to the correct corresponding function.
+	// By default, it reads from std::cin, but you can also read from a file stream or other std stream.
+	// It will automatically recognize your command and apply your argument to the correct corresponding function.
 	auto ipt = rm_input(student_console);
 	while (ipt()) {}
 
