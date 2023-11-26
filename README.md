@@ -535,7 +535,7 @@ int main()
 in the above codes, you can see a nested template to, it's inherited from exp_list
 ```cpp
 template<class ...TS>
-struct exp_lst
+struct exp_list
 {
 	static constexpr size_t length = sizeof...(TS);
 	template<template<class...> class TL>
@@ -570,3 +570,17 @@ int main()
 }
 ```
 
+You can also directly delim a std::array, or a std::tuple, the function `array_delim` is based on fstring.
+```cpp
+#include"flex_string.hpp"
+#include<array>
+
+using namespace flex_string;
+using namespace flex_string::flex_string_space;
+
+int main()
+{
+	std::array ip{ 192, 168, 0, 1 };
+	std::cout << array_delim(ip, exp_char<'.'>{});
+}
+```
