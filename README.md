@@ -584,3 +584,78 @@ int main()
 	std::cout << array_delim(ip, exp_char<'.'>{});
 }
 ```
+
+### The `wrap_list`
+The wrap_list is aimed at wrapping specified elements, or, all elements, with a set of character in an output string,
+It's recommand to do the wrapping operation before the delimitation, also it's one of the transforming chain typelist, which means
+you can directly use the nest template `to` to transform any `exp_list` based typelist to it. 
+```cpp
+#include"flex_string.hpp"
+#include<array>
+
+using namespace flex_string;
+using namespace flex_string::flex_string_space;
+
+template<class sstr> using wrap_and_delim = fs_final<
+	typename sstr
+::template to<wrap_list>::template apply<chars_wrapper <'[', ']'>>
+::template to<delim_list>::template apply<exp_char<','>>
+>;
+
+int main()
+{
+	fstring fstr{ 1,2,3,4,5 };
+	std::cout << fstr.transformed_string<wrap_and_delim>();
+}
+//output: [1],[2],[3],[4],[5]
+```
+The `delim_list` will perform a pefect delim, there will be no extra spaces, commas or any other side effects of outputing, 
+for example, if you try to print an array by a for loop
+```cpp
+
+int main()
+{
+	std::array arr{ 1,2,3,4,5 };
+	for (const auto i : arr)
+	{
+		std::cout << '[' << i << ']' << ',';
+	}
+}
+//output: [1],[2],[3],[4],[5],
+```
+It's very difficult to achieve a perfect delimitation of an output of elements like what the fstring can do.
+
+To select what you need to wrap, for example, if you want to highlight only numbers in a fstring
+```cpp
+#include"flex_string.hpp"
+#include<string>
+
+using namespace std::literals;
+
+using namespace flex_string;
+using namespace flex_string::flex_string_space;
+
+template<class T> struct select_int 
+{
+	static constexpr bool value = std::is_same_v<int, T>;
+};
+
+template<class sstr, class fstr_type>
+struct wrap_numbers_and_delim
+{
+	using get_numbers = select_if_list<select_int, typename to_exp_list<fstr_type>::type::template to<tag_list>>;
+	using wrap_ctrl = typename sstr::template to<wrap_list>::template with_indices<typename get_numbers::cv_typelist, chars_wrapper <'[', ']'>>::wrap;
+	using delim_ctrl = typename wrap_ctrl::template to<delim_list>::template apply<exp_char<' '>>;
+	using type = fs_final<delim_ctrl>;
+};
+
+template<class sstr, class fstr_type> using wrap_delim = typename wrap_numbers_and_delim<sstr, fstr_type>::type;
+
+int main()
+{
+	fstring Michaelstr{ "Michael is a grade"s, int{7}, "student."s, "he heights at:"s, int{173}, "and weights at:"s, int{66}};
+
+	std::cout << Michaelstr.transformed_string<wrap_delim>();
+}
+//output: Michael is a grade [7] student. he heights at: [173] and weights at: [66]
+```
