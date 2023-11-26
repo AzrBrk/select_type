@@ -82,6 +82,7 @@ namespace exp_operator
 	{
 		return !(iter > val);
 	}
+
 	template<class R, class STR>
 		requires std::is_same_v<std::decay_t<STR>, std::string>
 	std::istringstream& operator>>(std::istringstream& iss, exp_function_binder<R(STR)>& efb)

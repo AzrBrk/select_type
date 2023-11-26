@@ -1,6 +1,7 @@
 #pragma once
 
 #include"exp_vh_node.hpp"
+#define meta_while meta_looper_t
 
 namespace flex_string
 {
@@ -16,6 +17,9 @@ namespace flex_string
 	template<class ...char_vals> struct chars : exp_list<char_vals...> {
 		using chars_to_selectable = selectable_list<char_vals...>;
 	};
+
+	template<char ...cs> using exp_chars = chars<char_val<cs>...>;
+	template<char c> using exp_char = char_val<c>;
 
 	using lbracket = char_val<'{'>;
 	using rbracket = char_val<'}'>;
@@ -45,8 +49,8 @@ namespace flex_string
 		};
 		namespace repeator
 		{
-			template<class...> struct repeat_list {};
-			template<class...> struct repeat_mode {};
+			template<class...TS> struct repeat_list :exp_list<TS...> {};
+			template<class...TS> struct repeat_mode :exp_list<TS...> {};
 			template<class T> using generate_self_o = meta_object<T, meta_empty_fn>;
 			template<size_t N, class T> struct meta_repeator
 			{
@@ -160,8 +164,187 @@ namespace flex_string
 		
 
 		}
+		namespace join
+		{
+			
+			struct join_append_f
+			{
+				template<class ThisMO, class T> struct join_append
+				{
+					using type = get_type<
+						exp_join_impl<ThisMO, T>
+					>;
+				};
+				template<class ThisMO, template<class ...> class TL, class ...L> 
+				struct join_append<ThisMO, TL<L...>>
+				{
+					using type = get_type<
+						exp_join<ThisMO, TL<L...>>
+						>;
+				};
+				template<class ThisMO, class T, class...> using apply = get_type<join_append<ThisMO, T>>;
+			};
+			template<class TL> using meta_join_append_o = meta_object<typename exp_empty<TL>::type, join_append_f>;
+
+			template<class ...Typs> struct join_list_impl :exp_list<Typs...> 
+			{
+				using op = meta_join_append_o<exp_list<Typs...>>;
+				using ip = ip_stream<exp_list<Typs...>>;
+				using type = typename meta_all_transfer<op, ip>::to::type;
+			};
+
+			template<class ...Typs> using join_list = get_type<join_list_impl<Typs...>>;
+
+			template<class... typs> struct all_is_true_list :exp_list<typs...>
+			{
+				template<template<class> class F> struct apply
+				{
+					static constexpr bool value = std::conjunction_v<F<typs>...>;
+				};
+			};
+
+			template<class T> struct is_not_typelist : std::true_type {};
+			template<template<class...> class TL, class ...TS> 
+			struct is_not_typelist<TL<TS...>> : std::false_type {};
+
+			template<class TL> struct is_exp_list_based: std::false_type{};
+			template<template<class ...> class TL, class ...TS> 
+			struct is_exp_list_based<TL<TS...>> 
+			{
+				static constexpr bool value = std::is_base_of_v<exp_list<TS...>, TL<TS...>>;
+			};
+			template<class TL> constexpr bool is_exp_list_based_v = is_exp_list_based<TL>::value;
+
+			template<class exp_list_based_tl> requires is_exp_list_based_v<exp_list_based_tl>
+			constexpr bool is_all_joined_v = exp_list_based_tl
+				::template to<all_is_true_list>
+				::template apply<is_not_typelist>
+				::value;
+
+			//recursivly separate all typelist elements in a typelist
+			//requires a typelist based on exp_list
+			template<class TL> requires is_exp_list_based_v<TL> 
+			struct final_join
+			{
+				struct is_not_final_joined_cof {
+					template<class ThisObj, class...>
+					struct apply
+					{
+						static constexpr bool value = !is_all_joined_v<ThisObj>;
+					};
+				};
+		
+				struct final_joined_transform_of
+				{
+					template<class ThisObj, class...>
+					using apply = ThisObj::template to<join::join_list>;
+				};
+
+				using is_not_final_joined_co = meta_object<TL, is_not_final_joined_cof>;
+				using final_joined_transform_o = meta_object<TL, final_joined_transform_of>;
+
+				using type = typename meta_while<is_not_final_joined_co, final_joined_transform_o>::type;
+			};
+
+		}
+		
+		namespace static_wrap
+		{
+			template<char WL, char WR> struct chars_wrapper
+			{
+				static_assert((WL != '{' && WR != '}'),"forbid using of format default contol characters");
+				using left = char_val<WL>;
+				using right = char_val<WR>;
+				template<class T> using apply = chars<left, T, right>;
+			};
+			template<class ...cs> struct wrap_list : exp_list<cs...>
+			{
+				template<class F> using apply = exp_fn_apply<F, exp_list<cs...>>;
+				template<class idx_type_container, class wrap_f> struct with_indices
+				{};
+
+				template<template<class...> class idx_type_container, class wrap_f, class ...TS>
+				struct with_indices<idx_type_container<TS...>, wrap_f>
+				{
+					struct wrap_with_indices_f
+					{
+						template<class TO, class idx_type, class...>
+						struct apply_impl { using type = TO; };
+
+						template<class TO, template<size_t> class idx_type, size_t I, class ...TS>
+						struct apply_impl<TO, idx_type<I>, TS...>
+						{
+							using type = TO
+								::template invoke<I>
+								::template transform_to<wrap_f>;
+						};
+						
+						template<class TO, class idx_type, class...TS>
+						using apply = typename apply_impl<TO, idx_type, TS...>::type;
+					};
+					template<class TL> using wrap_op_stream = meta_object<
+						to_selectable_t<TL>, 
+						wrap_with_indices_f
+					>;
+					using idx_ip_stream = ip_stream<idx_type_container<TS...>>;
+
+					using wrap = meta_all_transfer<wrap_op_stream<exp_list<cs...>>, idx_ip_stream>::template to::type;
+				};
+			};
+		}
 		template<size_t N>
 		using meta_create_sequence = exp_repeat::meta_to_array<exp_repeat::meta_itoa<N>>;
+		namespace tag
+		{
+			template<class TL, class idx_container> struct tag_list_impl {};
+
+			template<template<class...> class TL, template<size_t ...> class idx_container, class ...TS, size_t ...I>
+			struct tag_list_impl<TL<TS...>, idx_container<I...>>
+			{
+				using type = exp_list<meta_tag<I, TS>...>;
+			};
+
+			template<class ...TS> struct tag_list_type: exp_list<TS...>
+			{
+				using type = typename tag_list_impl<exp_list<TS...>, meta_create_sequence<sizeof...(TS) - 1>>::type;
+			};
+
+			template<class ...TS> using tag_list = typename tag_list_type<TS...>::type;
+		}
+		namespace select_if_space
+		{
+			template<template<class> class F> struct select_if_f
+			{
+				template<class TO, class T, class ...> struct apply : std::false_type{};
+				template<class TO, template<size_t, class> class idx_tag, size_t I, class T, class ...TS>
+				struct apply<TO, idx_tag<I, T>, TS...>
+				{
+					//a fliter flites all elements that follow the meta functions rule
+					//so a negation is needed to get types those follow the functions rule
+					static constexpr bool value = !F<T>::value;
+				};
+			};
+
+			template<template<class> class F> using select_if_op = meta_appendable_fliter_o<exp_list<>, select_if_f<F>>;
+			template<class TL> using select_if_ip = meta_ret_decreasible_o<TL>;
+
+			//to use this feature, a typelist must be tagged by indices
+			//to prevent repeat types in a typelist
+			template<template<class> class F,class TL>
+			using select_if_impl =typename meta_all_transfer<select_if_op<F>, select_if_ip<TL>>::template to::type;
+
+			//only indices are what needed so types will be erased
+			template<class> struct get_rid_of_type {};
+			template<template<size_t, class> class tag_list_t, size_t ...I, class ...TS>
+			struct get_rid_of_type<exp_list<tag_list_t<I, TS>...>>
+			{
+				using type = meta_array<I...>;
+			};
+
+			template<template<class> class F, class TL> using select_if_list = typename get_rid_of_type<
+				select_if_impl<F, TL>
+			>::type;
+		}
 		template<const char* sptr, size_t ...indices>
 		struct static_str_impl
 		{
@@ -237,13 +420,13 @@ namespace flex_string
 	//the fstring is a string constains various types of data
 	//each element in the string accessible through providing index 
 	template<class ...Typs> requires check_formatible_v<Typs...>
-	struct fstring:VH_NODE::node_struct<Typs...>
+	struct fstring :VH_NODE::node_struct<Typs...>
 	{
 		fstring(Typs&&...typs) :VH_NODE::node_struct<Typs...>(std::move(typs)...) {}
 
 		using fs_bracket = meta_string_stream::repeator::repeat_list<lbracket, rbracket>;
 
-		
+
 
 		//use a static const string as control
 		template<const char* fsfmt> std::string fmt_string()
@@ -261,22 +444,22 @@ namespace flex_string
 				[&binder](auto& value) {binder.bind(value); });
 			return binder();
 		}
-		
-		//create a basic control string to show all element in fstring
+
+		//create a basic control string to show all elements in fstring
 		//can be modified 
-		constexpr auto control_str()->chars<
+		constexpr auto control_str() -> chars<
 			meta_string_stream::repeator::do_repeat<sizeof...(Typs), fs_bracket>
 		>::template to<meta_string_stream::repeator::repeat_raw>
 		{
 			return{};
 		}
-		
+
 		template<class s_str, template<size_t...> class idx_v, size_t ...I>
 		std::string static_string(idx_v<I...>)
 		{
 			auto string_maker = []<class ...Typs>(Typs&&...typs)
 			{
-				using iter = typename s_str::chars_to_selectable;
+				using iter = typename s_str::template to<selectable_list>;
 				static const char str[]{ iter::get<I>::value...,0 };
 				return std::format(str, std::move(typs)...);
 			};
@@ -291,7 +474,7 @@ namespace flex_string
 		}
 
 		//use exp_chars as control
-		template<class s_str> 
+		template<class s_str>
 		std::string exp_to_string()
 		{
 			return this->static_string<s_str>(meta_string_stream::meta_create_sequence<s_str::length - 1>{});
@@ -299,8 +482,8 @@ namespace flex_string
 		//out put every element as string
 		std::string to_string()
 		{
-			auto string_maker = []<class...Typs>(Typs&&...typs) { 
-				return format_output(std::move(typs)...); 
+			auto string_maker = []<class...Typs>(Typs&&...typs) {
+				return format_output(std::move(typs)...);
 			};
 			auto binder = exp_bind::bind(
 				function_impl::realize_meta<
@@ -311,15 +494,93 @@ namespace flex_string
 				[&binder](auto& value) {binder.bind(value); });
 			return binder();
 		}
+
+		template<template<class> class transform_fn > auto transformed_string()
+		{
+			using original_cs = decltype(control_str());
+			return std::move(exp_to_string<transform_fn<original_cs>>());
+		}
+		template<template<class, class> class transformed_this_fn> auto transformed_string()
+		{
+			return std::move(exp_to_string<transformed_this_fn<decltype(control_str()), fstring<Typs...>>>());
+		}
 		
 	};
+	template<class arr_like> struct array_to_fstring {};
+
+	template<template<class, size_t> class array_like, class T, size_t N>
+	struct array_to_fstring<array_like<T, N>>
+	{
+		using type = meta_string_stream::repeator::repeat_raw<
+			meta_string_stream::repeator::do_repeat<N, T>
+		>::template to<fstring>;
+	};
+
+	
+	struct same_type_fstring
+	{
+		template<class ...Tys>
+		auto operator()(Tys...args)->fstring<Tys...>
+		{
+			return { std::move(args)... };
+		}
+	};
+
+
+	template<template<class, size_t> class array_like, class T, size_t N>
+	auto array_fstring(array_like<T, N> const& arr)
+	{
+		auto fs_creator = exp_bind::bind(
+			function_impl::realize_meta<
+			meta_string_stream::repeator::repeat_raw<
+			meta_string_stream::repeator::do_repeat<N, T>
+			>
+			>(same_type_fstring{}));
+		for (const T& i : arr)
+		{
+			fs_creator.bind(i);
+		}
+		return fs_creator.apply_func();
+	}
+
+	template<size_t ...I, class ...Typs>
+	auto tuple_fstring_impl(std::tuple<Typs...> tp, meta_array<I...> ma)
+	{
+		return fstring{ std::move(std::get<I>(tp))... };
+	}
+
+	template<class TP> auto tuple_fstring(TP const& tp)
+	{
+		return tuple_fstring_impl(tp, meta_create_sequence<exp_size<TP> - 1>());
+	}
+
+
+	//get a string with array delim with a char type
+	//char type must provide ::value of char
+	template<template<class, size_t> class array_like, class T, size_t N, class char_delimiter>
+	std::string array_delim(array_like<T, N> const& arr, char_delimiter cd)
+	{
+		auto fs_array = array_fstring(arr);
+
+		using delim_control = decltype(fs_array.control_str())
+			::template to<meta_string_stream::delimiter::delim_list>::template apply<char_delimiter>
+			::template to<meta_string_stream::join::join_list>
+			::template to<chars>;
+		return fs_array.exp_to_string<delim_control>();
+	}
+
 
 	template<class ...Typs>
 	fstring(Typs&& ...) -> fstring<Typs...>;
-#define	EXP_STATIC_STR(x) static_str<(sizeof x) - 1, x> 
-#define	EXP_STATIC_TO_STR(x) static_to_str<x, x::length>::type::str;
+	
 
-	template<class TL> using fs_final = TL::template to<meta_string_stream::repeator::repeat_raw>::template to<chars>;
+	
+#define	EXP_STATIC_STR(x) static_str<(sizeof x) - 1, x> 
+#define	EXP_STATIC_TO_STR(x) static_to_str<x, x::length>::type::str
+
+
+	template<class TL> using fs_final = typename meta_string_stream::join::final_join<TL>::type
+		::template to<chars>;
 
 	namespace common_utility
 	{
@@ -330,7 +591,17 @@ namespace flex_string
 			using IPV4 = fstring<short, short, short, short>;
 		};
 		
-		using ip_format = ip_format_type::type;
+		using ipv4_format = ip_format_type::type;
 		using ipv4_t = ip_format_type::IPV4;
+	}
+	namespace flex_string_space
+	{
+		using namespace meta_string_stream;
+		using namespace repeator;
+		using namespace delimiter;
+		using namespace join;
+		using namespace tag;
+		using namespace select_if_space;
+		using namespace static_wrap;
 	}
 }

@@ -7,6 +7,17 @@ namespace meta_traits
 	using namespace exp_repeat;
 	using namespace exp_repeat::operators;
 
+	template<class F, class TL>
+	struct exp_fn_apply_impl {};
+
+	template<class F, template<class ...> class TL, class ...L>
+	struct exp_fn_apply_impl<F, TL<L...>>
+	{
+		using type = TL<meta_invoke<F, L>...>;
+	};
+
+	template<class F, class TL> using exp_fn_apply = typename exp_fn_apply_impl<F, TL>::type;
+
 	struct meta_empty {};
 	struct meta_empty_fn { template<class T, class ...> using apply = T;};
 
@@ -90,14 +101,16 @@ namespace meta_traits
 
 	template<bool _continue, class MMO(Condition), class MMO(Obj), class MMO(Generator) = meta_object<meta_empty, meta_empty_fn>> struct meta_looper
 	{
-		//transfer current obj to  con_obj to judge
-		using _continue_t = typename meta_invoke<meta_transfer_object<MMO(Obj), MMO(Condition)>>::type;
-		static const bool _continue_ = _continue_t::value;
 			
 		//invoke from generator
 		template<class ...Args> struct apply {
+
+			//transfer current obj to  con_obj to judge
+			using _continue_t = typename meta_invoke<meta_transfer_object<MMO(Obj), MMO(Condition)>>::type;
+			static const bool _continue_ = _continue_t::value;
 			using generator_stage_o = meta_invoke<MMO(Generator), Args...>;//invoke generator object;
 			using result_stage_o = exp_if<_continue_, meta_object_invoke<MMO(Obj), generator_stage_o>, MMO(Obj)>;
+			using next_stage = meta_looper<_continue_, MMO(Condition), result_stage_o, generator_stage_o>;
 			using track_apply_t =typename meta_looper<
 				_continue_, 
 				MMO(Condition),
@@ -121,6 +134,8 @@ namespace meta_traits
 	template<class MMO(Condition), class MMO(Obj), class MMO(Generator) = meta_object<meta_empty, meta_empty_fn>>
 	using meta_looper_stage = meta_invoke<meta_looper<true, MMO(Condition), MMO(Obj), MMO(Generator)>>;
 
+	
+
 	//common meta_object container
 	namespace common_object 
 	{
@@ -134,7 +149,7 @@ namespace meta_traits
 			{
 				using type = TL<Typs..., Outer_ty>;
 			};
-			template<class thisObj, class _2> using apply = append_impl<thisObj, _2>::type;
+			template<class thisObj, class _2> using apply = typename append_impl<thisObj, _2>::type;
 		};
 		struct decreased
 		{
@@ -180,11 +195,18 @@ namespace meta_traits
 		template<class condition_f> struct fliter : append
 		{
 			template<class thisObj, class _2> using apply = exp_if<
-				(!meta_invoke<condition_f, thisObj,_2>::value),
+				(!meta_invoke<condition_f, thisObj, _2>::value),
 				append::apply<thisObj, _2>,
 				thisObj
 			>;
 		};
+		struct replace_transform {
+			template<class thisObj, class _2> using apply = _2;
+		};
+		//an mo replace to replace itself in looper
+		using meta_replace_o = meta_object<meta_empty, replace_transform>;
+
+		template<size_t N> using meta_replace_to = meta_timer_object<N, meta_empty, replace_transform>;
 		//an mo convert typelist to an appendable list in looper
 		template<class TL> using meta_appendable_o = meta_object<TL, append>;
 
@@ -251,4 +273,25 @@ namespace meta_traits
 			exp_if<start_is_greater, inc_idx_t<idx_end>, meta_expr<idx_end, sub, exp_repeat::Idx<1>>>,
 			idx_start, stage_t>::type;
 	};
+	template<class I> struct meta_integer_segment {};
+	template<size_t I> struct meta_integer_segment<Idx<I>>
+	{
+		template<class T> struct count_impl {};
+		template<size_t counts> requires (counts >= 1) struct count_impl<Idx<counts>>
+		{
+			using count_gen = typename meta_timer_looper_t<
+				meta_timer_object<counts - 1, exp_list<>, common_object::append>,
+				common_object::meta_idx_c_go<I>
+			>::type;
+			using type = get_type<add_to_front<Idx<I>, count_gen>>;
+		};
+		template<class counts>
+		using apply = get_type<count_impl<counts>>;
+	};
+
+	template<size_t I, size_t counts> requires (counts >= 1)
+		using meta_cout = meta_integer_segment<Idx<I>>::template apply<Idx<counts>>;
+
+	template<size_t I, size_t counts> using list_slice = exp_repeat::meta_to_array<
+		meta_cout<I, counts>>::template to<exp_select_list>;
 }

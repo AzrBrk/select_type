@@ -87,8 +87,8 @@ namespace exp_repeat
 	
 
 	template<size_t NUM>
-	using meta_itoa = typename looper<true, _Appendable_Meta_List<exp_list<exp_repeat::Idx<0>>>,
-		_Increase_Idx, exp_repeat::Idx<0>>::apply<_Length_Less_Than<NUM>>::type::type;
+	using meta_itoa = typename looper<(NUM != 0), _Appendable_Meta_List<exp_list<exp_repeat::Idx<0>>>,
+		_Increase_Idx, exp_repeat::Idx<0>>::template apply<_Length_Less_Than<NUM>>::type::type;
 
 	template<size_t ..._NUM>
 	struct meta_array
@@ -96,6 +96,8 @@ namespace exp_repeat
 		using cv_typelist = exp_list<Idx<_NUM>...>;
 		template<size_t N> struct apply :exp_select<N, cv_typelist>
 		{};
+		template<template<size_t...I> class integer_array_type>
+		using to = integer_array_type<_NUM...>;
 	};
 
 	template<class TL>

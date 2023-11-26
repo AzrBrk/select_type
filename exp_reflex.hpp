@@ -91,13 +91,13 @@ namespace exp_reflex
 				return true;
 			};
 		auto rm_efb = exp_bind::bind(rm_ip_binder);
-
-		auto inputter = [rm_efb]()
+		//支持标准输入流的派生类 sstream, fstream, 默认为std::cin
+		auto inputter = [rm_efb](std::istream& is = std::cin)
 			{
 				auto efb = rm_efb;
 				std::string args;
-				std::cin >> efb;
-				std::getline(std::cin, args);
+				is >> efb;
+				std::getline(is, args);
 				efb.bind(args);
 				return efb.apply_func();
 			};

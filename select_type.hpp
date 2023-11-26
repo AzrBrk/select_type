@@ -49,6 +49,9 @@ struct type_list_size<TL<L...>>
 template<class L>
 using size_of_type_list = type_list_size<L>;
 
+template<class L>
+constexpr size_t exp_size = size_of_type_list<L>::value;
+
 template<class T>
 struct is_empty_list
 {
@@ -64,8 +67,11 @@ struct is_empty_list<TL<>>
 template<class T>
 struct max_type_list_index
 {
+	static_assert(exp_size<T> != 0, "Can not provide index from an empty list!");
 	static constexpr auto value = size_of_type_list<T>::value - 1;
 };
+
+template<class TL> constexpr size_t max_index = max_type_list_index<TL>::value;
 
 struct end_of_list {};
 template<class L>
@@ -384,6 +390,12 @@ struct element_<true, N, TL, Pointer_Wrapper>
 	static const bool has_next = false;
 };
 
+template<bool End_Type, size_t N, class TL, template<class...> class Pointer_Wrapper>
+struct type_list_size <element_<End_Type, N, TL, Pointer_Wrapper>>
+{
+	static constexpr size_t value = element_<End_Type, N, TL, Pointer_Wrapper>::capacity;
+};
+
 
 template<size_t N, class TL, template<class...> class Pointer_Wrapper>
 using element_node = element_<N == max_type_list_index<TL>::value, N, TL, Pointer_Wrapper>;
@@ -393,6 +405,7 @@ using exp_node = element_node<0, exp_list<TL...>, PW>;
 
 template<class ...L>
 using exp_shared_node = exp_node<std::shared_ptr, L...>;
+
 
 template<class Value_Type, class Current_Node_Type, class Constructor>
 typename Current_Node_Type::next_pointer_type create_next(Current_Node_Type & _no, Value_Type const& val, Constructor&& con_f)
