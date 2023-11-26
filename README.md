@@ -628,6 +628,7 @@ It's very difficult to achieve a perfect delimitation of an output of elements l
 To select what you need to wrap, for example, if you want to highlight only numbers in a fstring
 ```cpp
 #include"flex_string.hpp"
+#include<array>
 #include<string>
 
 using namespace std::literals;
@@ -643,9 +644,13 @@ template<class T> struct select_int
 template<class sstr, class fstr_type>
 struct wrap_numbers_and_delim
 {
-	using get_numbers = select_if_list<select_int, typename to_exp_list<fstr_type>::type::template to<tag_list>>;
-	using wrap_ctrl = typename sstr::template to<wrap_list>::template with_indices<typename get_numbers::cv_typelist, chars_wrapper <'[', ']'>>::wrap;
+	//get a meta_array with indices of integer type in a static format string
+	using get_numbers =typename select_if_list<select_int, typename to_exp_list<fstr_type>::type::template to<tag_list>>::cv_typelist;
+	//wrap_list: with_indices will only apply wrapping to indices provided
+	using wrap_ctrl = typename sstr::template to<wrap_list>::template with_indices<get_numbers, chars_wrapper <'[', ']'>>::wrap;
 	using delim_ctrl = typename wrap_ctrl::template to<delim_list>::template apply<exp_char<' '>>;
+	//fs_final will automatically try to convert the static string to which a fstring accept
+	//if it fail, the std::format will throw an exception while formating the string
 	using type = fs_final<delim_ctrl>;
 };
 
