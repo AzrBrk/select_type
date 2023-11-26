@@ -482,5 +482,91 @@ student: 'Tomcat' ID: 10008 score: 78.5
 student: 'Sherry Porter' ID: 10006 score: 89.5
 ```
 
+## The flex_string
 
+The flex_string is a tuple-like container for text format output, it is based on std::format, use its control flow to format a string.
+```cpp
+#include"flex_string.hpp"
+#include"operatable.hpp"
+
+using namespace exp_operator;
+using namespace flex_string;
+using namespace flex_string::flex_string_space;
+
+int main()
+{
+	fstring str{ std::string{"hello world,"}, int{2023} };
+	for (; str.at(1) < 2031; str.at(1) += 1)
+	{
+		std::cout << str.to_string() << '\n';
+	}
+}
+```
+
+Each part of data in `fstring` is independent, allowing users to change them quickly by index, the example above shows the basic use of fstring.
+But there's more, the `fstring` can change its output format by metaprogramming, this series of template transform static string to template char array.
+Allowing users to malipulate them like normal typelist 
+
+### The delim_list
+
+Right now, let's not disturbed by needing to write comma, space in a output string, it makes your output operation ugly. The delim_list is in namespace 
+`flex_string::meta_string_stream::delimitor`, you can simply using namespace flex_string_space to using these utilities templates, here we created a IP type of string
+
+```cpp
+#include"flex_string.hpp"
+#include"operatable.hpp"
+
+using namespace exp_operator;
+using namespace flex_string;
+using namespace flex_string::flex_string_space;
+
+int main()
+{
+	using my_ipv4_type = do_repeat<4, short>::to<fstring>;
+
+	my_ipv4_type ip{ 192,168,0,1 };
+
+	using ip_control = decltype(ip.control_str())::to<delim_list>::apply<exp_char<'.'>>;
+
+	std::cout << ip.exp_to_string<fs_final<ip_control>>();
+}
+```
+#### The typelist transforming chain
+in the above codes, you can see a nested template to, it's inherited from exp_list
+```cpp
+template<class ...TS>
+struct exp_lst
+{
+	static constexpr size_t length = sizeof...(TS);
+	template<template<class...> class TL>
+	using to = TL<TS...>;
+}
+
+
+```
+most of the typelist in `flex_string::meta_string_stream` are inherited from exp_list, or their final product is an exp_list, so users can easily swith between them.
+
+You can also use member function transformed_string to control the output format, by this way, you will need to given a template alias
+
+```cpp
+#include"flex_string.hpp"
+#include"operatable.hpp"
+
+using namespace exp_operator;
+using namespace flex_string;
+using namespace flex_string::flex_string_space;
+
+template<class sstr> using ip_control = fs_final<
+	typename sstr::template to<delim_list>::template apply<exp_char<'.'>>
+>;
+
+int main()
+{
+	using my_ipv4_type = do_repeat<4, short>::to<fstring>;
+
+	my_ipv4_type ip{ 192,168,0,1 };
+
+	std::cout << ip.transformed_string<ip_control>();
+}
+```
 
