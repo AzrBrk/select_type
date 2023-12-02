@@ -791,3 +791,85 @@ in common_object namespace, there several meta objects generators
 - with suffix _go, it means a generator type of meta object generators
 - with suffix _to, it means a meta timer object generator
 you can use them to generate different meta objects.
+### meta_stream
+
+A `meta_stream` is a meta object that can be used to generate a stream object.
+
+```cpp
+template<class MMO(To), class MMO(From)> struct meta_stream
+{
+	using from = MMO(From);
+	using to = MMO(To);
+	using cache = typename MMO(From)::ret;
+	using update = meta_stream<
+		typename invoke_object_if<(exp_size<typename MMO(From)::type> > 0)>
+		::template apply<MMO(To), MMO(From)>, meta_invoke<MMO(From)>
+	>;
+	template<class F> using apply = meta_invoke<F, MMO(To), MMO(From)>;
+};
+struct meta_stream_f
+{
+	template<class mo_stream, class...>
+	using apply = typename mo_stream::update;
+};
+
+template<class TL>
+using op_stream = meta_appendable_o<TL>;
+template<class TL>
+using ip_stream = meta_ret_decreasible_o<TL>;
+...
+
+template<size_t Transfer_Length, class MMO(To), class MMO(From)> 
+	requires (size_of_type_list<typename MMO(From)::type>::value >= Transfer_Length)
+	using meta_stream_o = meta_timer_object<
+	Transfer_Length,
+	meta_stream< MMO(To), MMO(From)>,
+	meta_stream_f
+>;
+
+template<class MMO(To), class MMO(From)>
+using meta_all_transfer = typename meta_timer_looper_t<
+	meta_stream_o<size_of_type_list<typename MMO(From)::type>::value, MMO(To), MMO(From)>
+>::type;
+```
+
+The purpose of the `meta_stream` is to facilitate transmission between typelists. By utilizing the `flex_string` library, a static string can be transformed into a typelist. The `meta_stream` allows for manipulation of static strings as if they were regular typelists. It enables the creation of a stream for a static string, similar to `std::cin` and `std::cout`.
+
+The `meta_stream` consists of two meta objects: the input source and the output destination. By defining the transfer process within a `meta_stream`, it becomes possible to control static strings effectively.
+
+In the provided example, the `ignore_space` meta function is used to filter out space characters from a static string. The `meta_all_transfer` type trait is employed to apply this transformation to the input static string, resulting in a transformed string without spaces. Finally, the transformed string is printed to the standard output stream.
+
+This powerful mechanism offered by `meta_stream` allows for sophisticated manipulation and processing of static strings.
+```cpp
+//example of using meta stream to control static string
+#include"flex_string.hpp"
+
+using namespace flex_string;
+using namespace flex_string_space;
+
+//a meta function the ignored space character
+struct ignore_space
+{
+	template<class T> struct ignore_impl :std::true_type{};
+
+	template<char c> struct ignore_impl<exp_char<c>>
+	{
+		static constexpr bool value = (c == ' ');
+	};
+	template<class this_type, class T> using apply = ignore_impl<T>;
+};
+
+int main()
+{
+	static constexpr char str[]{ "hello meta stream!" };
+	using str_tl = EXP_STATIC_STR(str);
+
+	//delete all space characters in a static string
+	using transform_str = meta_all_transfer<
+		meta_appendable_fliter_o<chars<>, ignore_space>, 
+		ip_stream<str_tl>
+	>::to::type;
+
+	std::cout << EXP_STATIC_TO_STR(transform_str);
+}
+```
