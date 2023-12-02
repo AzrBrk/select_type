@@ -1,12 +1,13 @@
 #pragma once
 
 #include"exp_vh_node.hpp"
+#include<format>
 #define meta_while meta_looper_t
 
 namespace flex_string
 {
 	template<class T>
-	concept formatible = requires(std::ostream & os, T && ty) { os << ty; };
+	concept formatible = requires(T x) { std::format("{}", x); };
 
 	template<class T> struct is_formatible { static const bool value = formatible<T>; };
 	template<class ...Typs> constexpr bool check_formatible_v = std::conjunction_v<is_formatible<Typs>...>;
@@ -257,6 +258,10 @@ namespace flex_string
 				using right = char_val<WR>;
 				template<class T> using apply = chars<left, T, right>;
 			};
+
+			using brackets_wrapper = chars_wrapper<'(', ')'>;
+			using square_brackets_wrapper = chars_wrapper<'[', ']'>;
+
 			template<class ...cs> struct wrap_list : exp_list<cs...>
 			{
 				template<class F> using apply = exp_fn_apply<F, exp_list<cs...>>;
@@ -289,6 +294,7 @@ namespace flex_string
 					using idx_ip_stream = ip_stream<idx_type_container<TS...>>;
 
 					using wrap = meta_all_transfer<wrap_op_stream<exp_list<cs...>>, idx_ip_stream>::template to::type;
+
 				};
 			};
 		}
@@ -344,6 +350,87 @@ namespace flex_string
 			template<template<class> class F, class TL> using select_if_list = typename get_rid_of_type<
 				select_if_impl<F, TL>
 			>::type;
+		}
+		namespace partial
+		{
+			template<size_t N, size_t L> struct partially_split
+			{
+				template<class TL> requires ((N + L) <= exp_size<TL>)
+				struct split
+				{
+					using front = typename meta_spliter<N>::template front<TL>;
+					using back = typename meta_spliter<N + L>::template back<TL>;
+					using join = typename meta_all_transfer<op_stream<front>, ip_stream<back>>::to::type;
+				};
+			};
+			template<class ...Typs> struct partially : exp_list<Typs...>
+			{
+				template<size_t N, size_t L> struct at 
+				{
+					template<class F> struct transform_impl
+					{
+						using type = join::join_list<
+							typename partially_split<N, L>::template split<exp_list<Typs...>>::front,
+							meta_invoke<F, typename list_slice<N, L>::template apply<exp_list<Typs...>>>, 
+							typename partially_split<N, L>::template split<exp_list<Typs...>>::back
+						>;
+					};
+					template<class F> using transform = typename transform_impl<F>::type;
+				};
+			};
+		}
+		namespace grouper
+		{
+			template<class TL> struct group
+			{
+				template<size_t N> struct group_decrease
+				{
+					template<class ThisTL, bool rest_is_enough_to_decrease> struct group_decrease_impl
+					{
+						using type = typename meta_stream_transfer_mo<
+							meta_stream_o<N, op_stream<exp_list<>>,
+							ip_stream<ThisTL>>
+							>::from::type;
+					};
+					template<class ThisTL> struct group_decrease_impl<ThisTL, false>
+					{
+						using type = ThisTL;
+					};
+					template<class ThisTL, class...> using apply = typename group_decrease_impl<ThisTL, (exp_size<ThisTL> >= N)>::type;
+				};
+
+				template<size_t N> struct group_decrease_ret
+				{
+					template<class ThisTL, bool rest_is_enough_to_ret> struct group_decrease_ret_impl
+					{
+						using type = meta_stream_transfer<
+							meta_stream_o<N, op_stream<exp_list<>>,
+							ip_stream<ThisTL>>
+							>;
+					};
+
+					template<class ThisTL> struct group_decrease_ret_impl<ThisTL, false>
+					{
+						using type = ThisTL;
+					};
+					template<class ThisTL, class...> using apply = typename group_decrease_ret_impl<ThisTL, (exp_size<ThisTL> >= N)>::type;
+				};
+				template<size_t N>
+				using group_stream_o = meta_stream_o<
+					(exp_size<TL> / N),
+					op_stream<exp_list<>>,
+					meta_ret_object<TL, group_decrease<N>,
+					group_decrease_ret<N>>
+					>;
+
+				template<size_t N> using devide_impl = meta_stream_transfer<group_stream_o<N>>;
+
+
+				template<size_t N> struct group_type {
+					using grouped = devide_impl<N>;
+					using rest = typename meta_stream_transfer_mo<group_stream_o<N>>::from::type;
+				};
+			};
 		}
 		template<const char* sptr, size_t ...indices>
 		struct static_str_impl
@@ -422,6 +509,7 @@ namespace flex_string
 	template<class ...Typs> requires check_formatible_v<Typs...>
 	struct fstring :VH_NODE::node_struct<Typs...>
 	{
+		fstring() {}
 		fstring(Typs&&...typs) :VH_NODE::node_struct<Typs...>(std::move(typs)...) {}
 
 		using fs_bracket = meta_string_stream::repeator::repeat_list<lbracket, rbracket>;
@@ -447,7 +535,7 @@ namespace flex_string
 
 		//create a basic control string to show all elements in fstring
 		//can be modified 
-		constexpr auto control_str() -> chars<
+		constexpr auto control_str() const-> chars<
 			meta_string_stream::repeator::do_repeat<sizeof...(Typs), fs_bracket>
 		>::template to<meta_string_stream::repeator::repeat_raw>
 		{
@@ -455,7 +543,7 @@ namespace flex_string
 		}
 
 		template<class s_str, template<size_t...> class idx_v, size_t ...I>
-		std::string static_string(idx_v<I...>)
+		std::string static_string(idx_v<I...>) const
 		{
 			auto string_maker = []<class ...Typs>(Typs&&...typs)
 			{
@@ -475,12 +563,12 @@ namespace flex_string
 
 		//use exp_chars as control
 		template<class s_str>
-		std::string exp_to_string()
+		std::string exp_to_string() const
 		{
 			return this->static_string<s_str>(meta_string_stream::meta_create_sequence<s_str::length - 1>{});
 		}
 		//out put every element as string
-		std::string to_string()
+		std::string to_string() const
 		{
 			auto string_maker = []<class...Typs>(Typs&&...typs) {
 				return format_output(std::move(typs)...);
@@ -495,17 +583,36 @@ namespace flex_string
 			return binder();
 		}
 
-		template<template<class> class transform_fn > auto transformed_string()
+		template<template<class> class transform_fn > auto transformed_string() const
 		{
 			using original_cs = decltype(control_str());
 			return std::move(exp_to_string<transform_fn<original_cs>>());
 		}
-		template<template<class, class> class transformed_this_fn> auto transformed_string()
+		template<template<class, class> class transformed_this_fn> auto transformed_string() const 
 		{
 			return std::move(exp_to_string<transformed_this_fn<decltype(control_str()), fstring<Typs...>>>());
 		}
 		
 	};
+	template<class ...Typs>
+	fstring(Typs&& ...) -> fstring<Typs...>;
+
+	template<template<class...> class F> struct ctr_wrapper {};
+
+	template<template<class...> class FMTCTR, class ...Typs> struct format_fstring : fstring<Typs...>
+	{
+		format_fstring() {}
+		format_fstring(ctr_wrapper<FMTCTR>, Typs&&... args) :fstring<Typs...>(std::move(args)...) {}
+
+		std::string to_string() const
+		{
+			return this->transformed_string<FMTCTR>();
+		}
+	};
+
+	template<template<class...> class FMTCTR, class ...Typs> format_fstring(ctr_wrapper<FMTCTR>, Typs&&... args) -> format_fstring<FMTCTR, Typs...>;
+
+
 	template<class arr_like> struct array_to_fstring {};
 
 	template<template<class, size_t> class array_like, class T, size_t N>
@@ -568,10 +675,17 @@ namespace flex_string
 			::template to<chars>;
 		return fs_array.exp_to_string<delim_control>();
 	}
+	template<template<typename> typename sstr_f, typename TP> std::string tuple_format(TP const& tp)
+	{
+		return tuple_fstring(tp).transformed_string<sstr_f>();
+	}
+	template<template<typename, typename> typename sstr_f, typename TP> std::string tuple_format(TP const& tp)
+	{
+		return tuple_fstring(tp).transformed_string<sstr_f>();
+	}
 
 
-	template<class ...Typs>
-	fstring(Typs&& ...) -> fstring<Typs...>;
+	
 	
 
 	
@@ -603,5 +717,21 @@ namespace flex_string
 		using namespace tag;
 		using namespace select_if_space;
 		using namespace static_wrap;
+		using namespace partial;
+		using namespace grouper;
 	}
 }
+template<template<typename ...> typename F, typename ...Typs>
+struct std::formatter<flex_string::format_fstring<F, Typs...>>
+{
+	template<typename ParseContext>
+	constexpr auto parse(ParseContext& ctx) {
+		return ctx.begin();
+	}
+
+	template<typename FormatContext>
+	auto format(flex_string::format_fstring<F, Typs...> const& ffstr, FormatContext& fctx) const
+	{
+		return format_to(fctx.out(), "{}", ffstr.to_string());
+	}
+};

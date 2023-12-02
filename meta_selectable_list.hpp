@@ -13,7 +13,10 @@ namespace meta_typelist
 		using from =MMO(From);
 		using to =MMO(To);
 		using cache = typename MMO(From)::ret;
-		using update = meta_stream<meta_object_invoke<MMO(To), MMO(From)>, meta_invoke<MMO(From)>>;
+		using update = meta_stream<
+			typename invoke_object_if<(exp_size<typename MMO(From)::type> > 0)>
+			::template apply<MMO(To), MMO(From)>, meta_invoke<MMO(From)>
+		>;
 		template<class F> using apply = meta_invoke<F, MMO(To), MMO(From)>;
 	};
 	struct meta_stream_f
@@ -53,12 +56,14 @@ namespace meta_typelist
 	template<size_t Transfer_Length, class MMO(To), class MMO(From)>
 	struct Meta_Stream_Transfer<meta_stream_o<Transfer_Length, MMO(To), MMO(From) >>
 	{
+		using timer = meta_timer_looper_t<meta_stream_o<Transfer_Length, MMO(To), MMO(From)>>;
 		using mo = typename meta_timer_looper_t<meta_stream_o<Transfer_Length, MMO(To), MMO(From)>>::type;
 		using type = typename meta_timer_looper_t<meta_stream_o<Transfer_Length, MMO(To), MMO(From)>>::type::to::type;
 	};
 
 	template<class MMO(stream)> using meta_stream_transfer = typename Meta_Stream_Transfer<MMO(stream)>::type;
 	template<class MMO(stream)> using meta_stream_transfer_mo = typename Meta_Stream_Transfer<MMO(stream)>::mo;
+	template<class MMO(stream)> using meta_stream_transfer_timer = typename Meta_Stream_Transfer<MMO(stream)>::timer;
 
 	
 	
@@ -158,5 +163,29 @@ namespace meta_typelist
 		template<template<class...> class TL2>
 		using with = TL2<T...>;
 	};
-	
+
+	//example of using meta stream and meta object to generate a typelist with each type in typelist is uniqued
+	//Note : a meta stream is itself an meta object
+	struct unique_type_list
+	{
+		template<class TL, class T> struct is_one_of_f :std::false_type
+		{};
+
+		template<template<class...> class TL, class T> struct is_one_of_f<TL<>, T> :std::true_type
+		{};
+
+		template<template<class...> class TL, class T, class TO, class ...Args> struct is_one_of_f<TL<T, Args...>, TO>
+		{
+			static constexpr bool value = !exp_is_one_of<TO, TL<T, Args...>>::value;
+		};
+
+		template<class ThisMo, class T> struct apply
+		{
+			static constexpr bool value = !(is_one_of_f<ThisMo, T>::value);
+		};
+	};
+
+	using unique_type_list_o = common_object::meta_appendable_fliter_o<exp_list<>, unique_type_list>;
+
+	template<class TL> using make_unique_list = typename meta_all_transfer<unique_type_list_o, ip_stream<TL>>::to::type;
 }

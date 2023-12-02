@@ -18,7 +18,7 @@ namespace meta_traits
 
 	template<class F, class TL> using exp_fn_apply = typename exp_fn_apply_impl<F, TL>::type;
 
-	struct meta_empty {};
+	struct meta_empty { static constexpr int value = 0; };
 	struct meta_empty_fn { template<class T, class ...> using apply = T;};
 
 
@@ -62,8 +62,18 @@ namespace meta_traits
 
 		template<class Outer_Obj>
 		using meta_set = meta_timer_object<times, Outer_Obj, F>;
+
+		template<size_t reset_time>
+		using reset = meta_timer_object<reset_time, MMO(Obj), F>;
 	};
 
+	template<class MMO(Obj), size_t N> struct To_Timer{};
+	template<class obj, class F, size_t N> struct To_Timer<meta_object<obj, F>, N>
+	{
+		using type = meta_timer_object<N, obj, F>;
+	};
+
+	template<class MMO(Obj), size_t N> using to_timer = typename To_Timer<MMO(Obj), N>::type;
 
 	template<class MMO(From), class MMO(To)>
 	struct meta_transfer {
@@ -97,20 +107,62 @@ namespace meta_traits
 	template<class MMO(From), class MMO(To)>
 	using meta_transfer_object = typename  meta_transfer<MMO(From), MMO(To)>::type;
 
-	
+	//use meta_object_invoke to invoke two meta objects if true
+	//meta object must be invoked with another meta object being argument
+	//if false, return original meta object
+	template<bool con> struct invoke_object_if
+	{
+		template<bool, class MO1, class MO2> struct meta_o_branch
+		{
+			using type = MO1;
+		};
+		template<class MO1, class MO2> struct meta_o_branch<true, MO1, MO2>
+		{
+			using type = meta_object_invoke<MO1, MO2>;
+		};
 
-	template<bool _continue, class MMO(Condition), class MMO(Obj), class MMO(Generator) = meta_object<meta_empty, meta_empty_fn>> struct meta_looper
+		template<class MO1, class MO2> using apply = typename meta_o_branch<con, MO1, MO2>::type;
+	};
+
+	//using meta_invoke to invoke a meta function with arguments if true
+	//if false, return the invoked meta function itself
+	template<bool con> struct invoke_meta_function_if
+	{
+		template<bool, class F, class ...Args> struct meta_function_branch
+		{
+			using type = F;
+		};
+		template<class F, class ...Args> struct meta_function_branch<true, F, Args...>
+		{
+			using type = meta_invoke<F, Args...>;
+		};
+
+		template<class F, class ...Args> using apply = typename meta_function_branch<con, F, Args...>::type;
+	};
+
+	
+	//Note: looper returns a meta object, not the context itself
+	template<bool, class MMO(Condition), class MMO(Obj), class MMO(Generator) = meta_object<meta_empty, meta_empty_fn>> struct meta_looper
 	{
 			
-		//invoke from generator
+		
 		template<class ...Args> struct apply {
 
-			//transfer current obj to  con_obj to judge
+			//transfer current obj to  condition_obj to judge
+			//transfer different context based on types of meta_object
 			using _continue_t = typename meta_invoke<meta_transfer_object<MMO(Obj), MMO(Condition)>>::type;
 			static const bool _continue_ = _continue_t::value;
-			using generator_stage_o = meta_invoke<MMO(Generator), Args...>;//invoke generator object;
-			using result_stage_o = exp_if<_continue_, meta_object_invoke<MMO(Obj), generator_stage_o>, MMO(Obj)>;
+
+			//invoke generator object if condition is true
+			using generator_stage_o = typename invoke_meta_function_if<_continue_>::template apply<MMO(Generator), Args...>;
+
+			//invoke Obj object if condition is true
+			using result_stage_o = typename invoke_object_if<_continue_>::template apply<MMO(Obj), generator_stage_o>;
+
+			//for debug
 			using next_stage = meta_looper<_continue_, MMO(Condition), result_stage_o, generator_stage_o>;
+
+			//recursively loop for result
 			using track_apply_t =typename meta_looper<
 				_continue_, 
 				MMO(Condition),
@@ -136,7 +188,7 @@ namespace meta_traits
 
 	
 
-	//common meta_object container
+	//common meta_object generator
 	namespace common_object 
 	{
 		struct append
@@ -181,16 +233,13 @@ namespace meta_traits
 		struct decrease_ret
 		{
 			template<class TL> struct first_type {
-				using type = void;
+				using type = no_exist_type;
 			};
 			template<template<class...> class TL, class T, class...rest> struct first_type <TL<T, rest...>>
 			{ 
 				using type = T; 
 			};
-			template<class TL> using apply = exp_if<size_of_type_list<TL>::value != 0, 
-				typename first_type<TL>::type, 
-				TL
-			>;
+			template<class TL> using apply = typename first_type<TL>::type;
 		};
 		template<class condition_f> struct fliter : append
 		{
@@ -203,28 +252,31 @@ namespace meta_traits
 		struct replace_transform {
 			template<class thisObj, class _2> using apply = _2;
 		};
-		//an mo replace to replace itself in looper
+		//a mo replace that replaces itself in looper
 		using meta_replace_o = meta_object<meta_empty, replace_transform>;
 
+		//a timer version of replace_o
 		template<size_t N> using meta_replace_to = meta_timer_object<N, meta_empty, replace_transform>;
-		//an mo convert typelist to an appendable list in looper
+
+		//a mo convert typelist to an appendable list in looper
 		template<class TL> using meta_appendable_o = meta_object<TL, append>;
 
-		//an mo convert typelist to an appendable list with fliter in looper
+		//a mo convert typelist to an appendable list with fliter in looper
 		template<class TL, class fn> using meta_appendable_fliter_o = meta_object<TL, fliter<fn>>;
 
-		//an mo convert typelist to an decreasible list in looper
+		//a mo convert typelist to an decreasible list in looper
 		template<class TL> using meta_decreasible_o = meta_object<TL, decreased>;
 
+		//a mo decrease itself step by step, return what is decrease when invoked
 		template<class TL> using meta_ret_decreasible_o = meta_ret_object<TL, decreased, decrease_ret>;
 
-		//generate a mo which limit max size of typelist when invoke
+		//generate a condition mo which limit max size of typelist when invoked
 		template<size_t N> using meta_length_limiter_o = meta_object<meta_empty, size_limiter<N>>;
 
-		//generate a mo which limit min size of typelist when invoke
+		//generate a condition mo which limit min size of typelist when invoked
 		template<size_t N> using meta_length_above_o = meta_object<meta_empty, size_above<N>>;
 	    
-		/*generate a mo which produces a greater idx when invoked*/
+		//a generator mo which produces a greater idx when invoked
 		template<size_t N> using meta_idx_c_go = meta_object<exp_repeat::Idx<N>, auto_inc_gen>;
 
 		//generate a conditional type mo
@@ -233,8 +285,16 @@ namespace meta_traits
 		//empty mo, mo container
 		using meta_empty_o = meta_object<meta_empty, meta_empty_fn>; 
 
+		//common timer condition mo 
 		using meta_timer_cnd_o = meta_object<meta_empty, timer_receiver>;
+
+		//a list for decrease mo incase of an empty list
 		template<class ...Typs> using decrease_list = exp_list<meta_empty, Typs...>;
+
+		template<class...Typs> struct type_list_size<exp_list<meta_empty, Typs...>>
+		{
+			static constexpr size_t value = sizeof...(Typs);
+		};
 	}
 	template<class MMO(Obj), class MMO(Generator) = common_object::meta_empty_o>
 	using meta_timer_looper_t = meta_looper_t<common_object::meta_timer_cnd_o, MMO(Obj), MMO(Generator)>;
