@@ -664,3 +664,130 @@ int main()
 }
 //output: Michael is a grade [7] student. he heights at: [173] and weights at: [66]
 ```
+## Meta Programming For fstring
+### Meta Object
+the meta data is not changable, while meta object can perform a changable-like behavior in a meta looper, in meta looper, the meta object recursivly change itself, the recursion is automatically done by looper, programmer doesn't need to do it manually.
+
+so far, there are 3 types of meta object in namespace meta_traits:
+```cpp
+/*A meta obj is a bind of a meta_function and an obj, each time it is invoked, it update itself to a new type,
+use ::type to get the inner obj*/
+template<class MMO(Obj), class F/*Define how to Update an obj*/>
+struct meta_object
+{
+	using type = MMO(Obj);
+	template<class ...Arg>
+	using apply = meta_object<meta_invoke<F, MMO(Obj), Arg...>, F>;
+
+	template<class Outer_Obj>
+	using meta_set = meta_object<Outer_Obj, F>;
+};
+
+//a meta object that returns a type in each loop progress
+template<class MMO(Obj), class F, class Ret>
+struct meta_ret_object 
+{
+	using ret = meta_invoke<Ret, MMO(Obj)>;
+	using type = MMO(Obj);
+	template<class ...Arg>
+	using apply = meta_ret_object<meta_invoke<F, MMO(Obj), Arg...>, F, Ret>;
+
+	template<class Outer_Obj>
+	using meta_set = meta_ret_object<Outer_Obj, F, Ret>;
+};
+
+//use times as condition, when times is 0, the looper with end the loop progress
+template<size_t times, class MMO(Obj), class F>
+struct meta_timer_object
+{
+	template<size_t ts> struct timer_
+	{
+		static const bool value = (ts > 0);
+	};
+	using timer = timer_<times>;
+	using type = MMO(Obj);
+	template<class ...Arg>
+	using apply = meta_timer_object<times - 1, meta_invoke<F, MMO(Obj), Arg...>, F>;
+
+	template<class Outer_Obj>
+	using meta_set = meta_timer_object<times, Outer_Obj, F>;
+
+	template<size_t reset_time>
+	using reset = meta_timer_object<reset_time, MMO(Obj), F>;
+};
+```
+The meta object mostly use in the following looper structure:
+```cpp
+
+	//Note: looper returns a meta object, not the context itself
+	template<bool, class MMO(Condition), class MMO(Obj), class MMO(Generator) = meta_object<meta_empty, meta_empty_fn>> struct meta_looper
+	{
+			
+		
+		template<class ...Args> struct apply {
+
+			//transfer current obj to  condition_obj to judge
+			//transfer different context based on types of meta_object
+			using _continue_t = typename meta_invoke<meta_transfer_object<MMO(Obj), MMO(Condition)>>::type;
+			static const bool _continue_ = _continue_t::value;
+
+			//invoke generator object if condition is true
+			using generator_stage_o = typename invoke_meta_function_if<_continue_>::template apply<MMO(Generator), Args...>;
+
+			//invoke Obj object if condition is true
+			using result_stage_o = typename invoke_object_if<_continue_>::template apply<MMO(Obj), generator_stage_o>;
+
+			//for debug
+			using next_stage = meta_looper<_continue_, MMO(Condition), result_stage_o, generator_stage_o>;
+
+			//recursively loop for result
+			using track_apply_t =typename meta_looper<
+				_continue_, 
+				MMO(Condition),
+				result_stage_o,
+				generator_stage_o
+			>::template apply<Args...>;
+			using type = typename track_apply_t::type;
+		};
+	};
+
+	template<class Cond, class MO, class Generator> struct meta_looper<false, Cond, MO, Generator>
+	{
+		template<class ...Args> struct apply
+		{
+			using type = MO;
+		};
+	};
+```
+here is the example of using meta object to realize a type selection
+```cpp
+//example of using meta object to realize type select in a typelist
+#include "meta_object_traits.hpp"
+
+#define meta_while meta_looper_t
+
+using namespace meta_traits;
+//use meta object common generators
+using namespace common_object;
+
+template<size_t N, class TL> using meta_select = typename meta_while<
+	//use common meta object generator to generate meta objects
+	meta_timer_cnd_o,
+	meta_replace_to<N>,
+	meta_ret_decreasible_o<TL>
+>::type;
+
+int main()
+{
+	using l = exp_list<int, double, char>;
+
+	std::cout << typeid(meta_select<1, l>).name();
+}
+```
+in common_object namespace, there several meta objects generators
+- with suffix _o, it means a common meta object generator
+- with suffix _cnd_o, or _co, it means a condition meta object generator
+- with suffix _ret_o, it meta_ret_object generator
+- with suffix _go, it means a generator type of meta object generators
+- with suffix _to, it means a meta timer object generator
+you can use them to generate different meta objects.
