@@ -873,3 +873,74 @@ int main()
 	std::cout << EXP_STATIC_TO_STR(transform_str);
 }
 ```
+### The fstring control string
+
+The fstring provides a basic control string that formats its inside elements. However, the basic control string is not capable of formatting a fstring string directly. To format an fstring, the control string must be a character array with no other types inside. The template alias `fs_final` is used to convert a typelist into that format. 
+
+Here is an example code snippet demonstrating the difference between a basic control string and the final control string:
+
+```cpp
+#include "flex_string.hpp"
+#include "exp_print.hpp"
+
+using namespace flex_string;
+using namespace flex_string_space;
+using exp_print::meta_print;
+
+int main()
+{
+    fstring fstr{ int{}, double{}, char{} };
+
+    using cstr = decltype(fstr.control_str());
+
+    meta_print<cstr>{}();
+    std::cout << '\n';
+    meta_print<fs_final<cstr>>{}();
+}
+```
+Output:
+```
+template<template<{,}>,template<{,}>,template<{,}>>
+template<{,},{,},{,}>
+```
+
+The basic control string is designed to manipulate a pair of curly braces as a single type because `std::format` uses these braces to control the formatting. You don't need to worry about wrapping these formats too much. The `fs_final` will recursively unwrap all these braces. Since fstring is based on `std::format`, all the elements inside must be formattable, which means you have to provide specialization for `std::formatter` for your custom class. The fstring will check if the type is formattable using C++20 concepts.
+
+To customize the control string, you can use the `to` function of `decltype(fstr.control_str())` and apply the `chars_wrapper` to wrap the desired characters.
+```cpp
+fstring fstr{ int{}, double{}, char{} };
+
+using cstr = decltype(fstr.control_str())
+    ::to<wrap_list>::apply<chars_wrapper<'[', ']'>>
+    ::to<wrap_list>::apply<chars_wrapper<'[', ']'>>
+    ::to<wrap_list>::apply<chars_wrapper<'[', ']'>>;
+
+meta_print<cstr>{}();
+std::cout << '\n';
+meta_print<fs_final<cstr>>{}();
+```
+Output:
+```
+template<template<[,template<[,template<[,template<{,}>,]>,]>,]>,template<[,template<[,template<[,template<{,}>,]>,]>,]>,template<[,template<[,template<[,template<{,}>,]>,]>,]>>
+template<[,[,[,{,},],],],[,[,[,{,},],],],[,[,[,{,},],],]>
+```
+The basic control string of `fstring` contains no type information about the elements inside. Therefore, the `fstring::transformed_string()` function allows you to use a template alias with two template arguments. The first template argument is the basic control string, and the second template argument is the type of the elements inside.
+
+The previous example of selecting numbers showed that:
+
+```cpp
+template<class sstr, class fstr_type>
+struct wrap_numbers_and_delim
+{
+    // Get a meta_array with indices of integer type in a static format string
+    using get_numbers = typename select_if_list<select_int, typename to_exp_list<fstr_type>::type::template to<tag_list>>::cv_typelist;
+    
+    // wrap_list: with_indices will only apply wrapping to indices provided
+    using wrap_ctrl = typename sstr::template to<wrap_list>::template with_indices<get_numbers, chars_wrapper <'[', ']'>>::wrap;
+    using delim_ctrl = typename wrap_ctrl::template to<delim_list>::template apply<exp_char<' '>>;
+    
+    using type = fs_final<delim_ctrl>;
+};
+```
+
+In this snippet, the `select_if_list` requires a tagged typelist with indices to perform more accurate selection. You can generate the tagged list simply by transforming the typelist to `tag_list::cv_typelist`. It provides a meta integer array with the indices of the selection type in the typelist. The `wrap_list` uses index information to perform the wrapping.
