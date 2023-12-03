@@ -944,3 +944,45 @@ struct wrap_numbers_and_delim
 ```
 
 In this snippet, the `select_if_list` requires a tagged typelist with indices to perform more accurate selection. You can generate the tagged list simply by transforming the typelist to `tag_list::cv_typelist`. It provides a meta integer array with the indices of the selection type in the typelist. The `wrap_list` uses index information to perform the wrapping.
+
+
+---
+#### The Partially Transform
+
+The partially typelist provides a slice of the typelist that references the original typelist. By applying a meta function to the slice, the changes will also apply to the original typelist.
+
+```cpp
+#include"flex_string.hpp"
+
+using namespace flex_string;
+using namespace flex_string_space;
+
+struct partially_wrapped
+{
+	template<class TL> 
+	using apply = meta_invoke<chars_wrapper<'[', ']'>,
+		typename TL::template to<delim_list>
+		::template apply<exp_char<','>>>;
+	
+};
+
+int main()
+{
+	fstring fstr{ int{10}, double{23.78}, char{'k'}};
+
+	using cstr = decltype(fstr.control_str())
+		::to<partially>::at<1, 2>::transform<partially_wrapped>;
+
+	std::cout << fstr.exp_to_string<fs_final<cstr>>();
+}
+
+```
+
+In this example, the partially typelist creates a slice reference to the original typelist that contains references to the `double` and `char` types. It then applies `partially_wrapped` to that slice.
+
+Output:
+```
+10[23.78,k]
+```
+
+---
