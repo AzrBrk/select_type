@@ -186,6 +186,40 @@ namespace meta_traits
 	template<class MMO(Condition), class MMO(Obj), class MMO(Generator) = meta_object<meta_empty, meta_empty_fn>>
 	using meta_looper_stage = meta_invoke<meta_looper<true, MMO(Condition), MMO(Obj), MMO(Generator)>>;
 
+	//easy interface for template functor recursion
+	//imagination of while constexpr
+	template<typename mo_cnd, typename mo_obj, typename mo_gen = meta_object<meta_empty, meta_empty_fn>> struct while_constexpr
+	{
+		using current_looper = meta_invoke<meta_looper<true, mo_cnd, mo_obj, mo_gen>>;
+
+		template<typename F, typename ...Args>
+		constexpr void recursivly_invoke(F&& f, Args &&...args) const noexcept
+		{
+			if constexpr (current_looper::_continue_)
+			{
+				f.template operator() < typename current_looper::result_stage_o::type > (std::forward<Args>(args)...);
+				while_constexpr<mo_cnd, typename current_looper::result_stage_o, typename current_looper::generator_stage_o>
+				{}.recursivly_invoke(std::forward<F>(f), std::forward<Args>(args)...);
+			}
+		}
+
+		//provide a transform function to automatically use while_constexpr transform
+		template<typename F, typename TF, typename ...Args> requires std::invocable<TF, typename current_looper::result_stage_o::type>
+		constexpr void recursivly_invoke(F&& f, TF&& tf, typename current_looper::result_stage_o::type&& o, Args&& ...args) const noexcept
+		{
+			if constexpr (current_looper::_continue_)
+			{
+				f.template operator() < typename current_looper::result_stage_o::type > (
+					std::forward<typename current_looper::result_stage_o::type>(o),
+					std::forward<Args>(args)...
+					);
+				while_constexpr<mo_cnd, typename current_looper::result_stage_o, typename current_looper::generator_stage_o>
+				{}.recursivly_invoke(std::forward<F>(f), std::forward<TF>(tf), tf(o), std::forward<Args>(args)...);
+			}
+		}
+	};
+
+
 	
 
 	//common meta_object generator
@@ -232,7 +266,7 @@ namespace meta_traits
 		};
 		struct decrease_ret
 		{
-			template<class TL> struct first_type {
+			template<class T> struct first_type {
 				using type = no_exist_type;
 			};
 			template<template<class...> class TL, class T, class...rest> struct first_type <TL<T, rest...>>
@@ -262,7 +296,7 @@ namespace meta_traits
 		template<class TL> using meta_appendable_o = meta_object<TL, append>;
 
 		//a mo convert typelist to an appendable list with fliter in looper
-		template<class TL, class fn> using meta_appendable_fliter_o = meta_object<TL, fliter<fn>>;
+		template<class TL, class fn> using meta_appendable_filter_o = meta_object<TL, fliter<fn>>;
 
 		//a mo convert typelist to an decreasible list in looper
 		template<class TL> using meta_decreasible_o = meta_object<TL, decreased>;

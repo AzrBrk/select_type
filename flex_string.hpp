@@ -331,7 +331,7 @@ namespace flex_string
 				};
 			};
 
-			template<template<class> class F> using select_if_op = meta_appendable_fliter_o<exp_list<>, select_if_f<F>>;
+			template<template<class> class F> using select_if_op = meta_appendable_filter_o<exp_list<>, select_if_f<F>>;
 			template<class TL> using select_if_ip = meta_ret_decreasible_o<TL>;
 
 			//to use this feature, a typelist must be tagged by indices
@@ -360,7 +360,7 @@ namespace flex_string
 				{
 					using front = typename meta_spliter<N>::template front<TL>;
 					using back = typename meta_spliter<N + L>::template back<TL>;
-					using join = typename meta_all_transfer<op_stream<front>, ip_stream<back>>::to::type;
+					using delete_part = typename meta_all_transfer<op_stream<front>, ip_stream<back>>::to::type;
 				};
 			};
 			template<class ...Typs> struct partially : exp_list<Typs...>
@@ -431,7 +431,63 @@ namespace flex_string
 					using rest = typename meta_stream_transfer_mo<group_stream_o<N>>::from::type;
 				};
 			};
+
+			template<class F> struct group_foreach_apply
+			{
+				template<template<class...> class rn> struct group_rename
+				{
+					template<class T> using apply = meta_rename<T>::template with<rn>;
+				};
+				template<size_t N> struct stride
+				{
+					template<class TL> using from = exp_fn_apply<group_rename<typename F::template apply>, typename grouper::group<TL>::template group_type<N>::grouped>;
+				};
+			};
 		}
+		//transform all types that matches an bool meta_function into to be deleted type
+//use a meta stream to filter the typelist.
+		namespace delete_if
+		{
+
+			template<typename ...TS> using common_typelist_ref = static_wrap::wrap_list<TS...>;
+
+			struct to_be_deleted{};
+			struct delete_conv_f
+			{
+				template<typename T> using apply = to_be_deleted;
+			};
+
+			struct delete_filter_f
+			{
+				template<typename ThisTL, typename T> struct apply
+				{
+					static constexpr bool value = std::is_same_v<T, to_be_deleted>;
+				};
+			};
+
+			using delete_filter_o = meta_appendable_filter_o<exp_list<>, delete_filter_f>;
+
+			template<typename TL, template<typename ...> typename F> struct meta_delete_if_impl
+			{
+				using to_exp_tagged = typename get_type<to_exp_list<TL>>::template to<tag::tag_list>;
+
+				using idx_t_v = typename select_if_space::select_if_list<F, to_exp_tagged>::cv_typelist;
+
+				using list_ref = typename get_type<to_exp_list<TL>>::template to<common_typelist_ref>;
+
+				using delete_conv_typelist = typename list_ref::template with_indices<idx_t_v, delete_conv_f>::wrap;
+
+				using type = typename meta_all_transfer<delete_filter_o, ip_stream<delete_conv_typelist>>::to::type;
+			};
+
+			template<typename TL, template<typename ...> typename F> using meta_delete_if = get_type<
+				meta_delete_if_impl<TL, F>
+			>;
+
+			template<typename TL, template<typename ...> typename F> constexpr size_t meta_delete_if_count =
+				exp_size<typename meta_delete_if_impl<TL, F>::idx_t_v>;
+		}
+
 		template<const char* sptr, size_t ...indices>
 		struct static_str_impl
 		{

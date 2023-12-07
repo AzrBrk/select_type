@@ -9,33 +9,93 @@ namespace exp_print
 	
 	template<class T> struct meta_print
 	{
-		void operator()() { std::cout << typeid(T).name(); }
+		std::ostream& operator()(std::ostream& os = std::cout) { os << typeid(T).name(); return os; }
 	};
 
 	template<template<size_t> class ival_type, size_t I> struct meta_print<ival_type<I>>
 	{
-		void operator()() { std::cout << '<' << I << '>'; }
+		std::ostream& operator()(std::ostream& os = std::cout) { os << '<' << I << '>'; return os; }
+	};
+
+	template<template<size_t, class> class tagged, size_t I, class T> struct meta_print<tagged<I, T>>
+	{
+		std::ostream& operator()(std::ostream& os = std::cout)
+		{
+			os << "template<" << I << ",";
+			meta_print<T>{}(os) << ">";
+			return os;
+		}
+	};
+	template<class obj, class F> struct meta_print<meta_object<obj, F>>
+	{
+		std::ostream& operator()(std::ostream& os = std::cout)
+		{
+			os << "MO{\n object = ";
+			meta_print<obj>{}(os) << "\n function = ";
+			meta_print<F>{}(os) << "\n}";
+			return os;
+		}
+	};
+	template<class TL> struct meta_print<ip_stream<TL>>
+	{
+		std::ostream& operator()(std::ostream & os= std::cout)
+		{
+			os << "SOURCE{";
+			meta_print<TL>{}(os) << "}";
+			return os;
+		}
+	};
+	template<class TL> struct meta_print<op_stream<TL>>
+	{
+		std::ostream& operator()(std::ostream& os = std::cout)
+		{
+			os << "DEST{";
+			meta_print<TL>{}(os) << "}";
+			return os;
+		}
+	};
+
+	template<class TL, class Fn> struct meta_print<meta_appendable_filter_o<TL, Fn>>
+	{
+		std::ostream& operator()(std::ostream& os = std::cout)
+		{
+			os << "FILTER{";
+			meta_print<TL>{}(os) << ":";
+			meta_print<Fn>{}(os) << "}";
+			return os;
+		}
+	};
+
+	template<size_t I, class obj, class F> struct meta_print<meta_timer_object<I, obj, F>>
+	{
+		std::ostream& operator()(std::ostream& os = std::cout)
+		{
+			os << "TIMER<" << I << ">";
+			meta_print<meta_object<obj, F>>{}(os);
+			return os;
+		}
 	};
 
 	template<template<char> class cval_type, char C> struct meta_print<cval_type<C>>
 	{
-		void operator()() { std::cout <<  C; }
+		std::ostream& operator()(std::ostream& os = std::cout) { os << C; return os; }
 	};
 	template<template<class ...> class TL, class ...LS> struct meta_print<TL<LS...>>
 	{
 		template<template<class ...> class MTL, class ...T> 
-		void print_impl(MTL<T...> const& l)
+		std::ostream& print_impl(MTL<T...> const& l, std::ostream& os = std::cout)
 		{
-			std::cout << "O.o<";
-			((meta_print<T>{}.operator()()), ...);
-			std::cout << ">o.O";
+			os << "template<";
+			((meta_print<T>{}.operator()(os)), ...);
+			os << ">";
+			return os;
 		}
-		void operator()()
+		std::ostream& operator()(std::ostream& os = std::cout)
 		{
 			using exp_TL = typename to_exp_list<TL<LS...>>::type;
 			using add_comma = exp_TL::template to<delim_list>;
 			using add_comma_type = add_comma::template apply<exp_char<','>>;
-			print_impl(add_comma_type{});
+			return print_impl(add_comma_type{}, os);
 		}
 	};
 	template<class looper> constexpr void track_looper()

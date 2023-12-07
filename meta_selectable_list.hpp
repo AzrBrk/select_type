@@ -30,6 +30,8 @@ namespace meta_typelist
 	template<class TL>
 	using ip_stream = meta_ret_decreasible_o<TL>;
 
+	template<size_t N> using meta_integer_ip_stream = meta_ret_decreasible_o<typename meta_itoa<N>::template to<decrease_list>>;
+
 	template<size_t Transfer_Length, class MMO(To), class MMO(From)> 
 		requires (size_of_type_list<typename MMO(From)::type>::value >= Transfer_Length)
 		using meta_stream_o = meta_timer_object<
@@ -185,7 +187,7 @@ namespace meta_typelist
 		};
 	};
 
-	using unique_type_list_o = common_object::meta_appendable_fliter_o<exp_list<>, unique_type_list>;
+	using unique_type_list_o = common_object::meta_appendable_filter_o<exp_list<>, unique_type_list>;
 
 	template<class TL> using make_unique_list = typename meta_all_transfer<unique_type_list_o, ip_stream<TL>>::to::type;
 }
