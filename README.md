@@ -985,4 +985,104 @@ Output:
 10[23.78,k]
 ```
 
----
+#### Debugging meta_object
+The typeid operator of C++ may perform well in most situation, but it won't play well with `meta_object`, thus, the `exp_print` is for the `meta_object` users, the `exp_print::meta_print` is template class that act as the typeid operator,
+except it specializes some cases of provided type:
+- a typelist, output template<...>, it ignore the typelist name since in a meta_stream, a typelist is regarded as only  a container
+- a type with a char type as template argument, output directly the char type content,
+- a type with a size_t type as template argment, output <I>(I is a size_t variable)
+- `meta_object` -see below
+- `meta_timer_object` -see below
+- `ip_stream`, `op_stream` -see below
+The definition of meta_print something is as below
+```cpp
+template<class T> struct meta_print
+{
+	std::ostream& operator()(std::ostream& os = std::cout){...}
+}
+```
+
+The meta_looper has a function version of specializing, the `while_constexpr`, in the following demo, you will see how to use `while_constexpr` and `meta_print`, to track a traverse of a tuple:
+```cpp
+#include"flex_string.hpp"
+#include"exp_print.hpp"
+#define delim "--------------------"
+
+using namespace flex_string;
+using namespace flex_string_space;
+using exp_print::meta_print;
+
+//a meta function to highlight which elemet is chose in a tuple
+//using fstring format output
+template<size_t I> struct wrap_at
+{
+    template<class sstr> using apply = fs_final<
+        typename to_selectable_t<sstr>
+        ::template invoke<I>
+        ::template transform_to<chars_wrapper<'[', ']'>>
+        ::template to<delim_list>
+        ::template apply<exp_char<','>>>;
+};
+
+
+int main()
+{
+    std::tuple tp{1, "2", 3.f, 4.87};
+
+    //track selected
+    while_constexpr<
+        meta_timer_cnd_o,
+        meta_stream_o<exp_size<decltype(tp)>, 
+        meta_replace_o, 
+        ip_stream<meta_itoa<exp_size<decltype(tp)> - 1>>>
+    >{}.recursivly_invoke([]<class idx_o>(auto mtp){
+        std::cout << delim << '\n';
+        meta_print<idx_o>{}() << ":";
+        meta_print<
+            exp_select<idx_o::to::type::value, decltype(mtp)>
+        >{}()
+            << ":\n" << tuple_format<wrap_at<idx_o::to::type::value>::template apply>(mtp) << '\n';
+        std::cout << delim << '\n';
+       
+    }, tp);
+
+   
+ }
+```
+
+The `while_constexpr` will recursivly invoke the a template functor until the meta looper return false, and it will try using its result type of each stage to realize the template functor,
+the above demo use a `meta_stream_object` which complex the code for only demonstrate the looping process, in the above demo, the `while_constexpr` fetch a value from a meta array that contains all indices
+for each elements from the tuple `tp` once a time, it transfer the `meta_stream_object` to the lambda function just to show the transforming of the looping stage, the looping times is set the amounts of the
+elements in `tp`, it use the tuple_format, which is from the library of flex_string.hpp to show the select result.
+
+Likely output:
+```
+--------------------
+template<MO{
+ object = <0>
+ function = struct meta_traits::common_object::replace_transform
+},SOURCE{template<<1>,<2>,<3>>}>:int:
+[1],2,3,4.87
+--------------------
+--------------------
+template<MO{
+ object = <1>
+ function = struct meta_traits::common_object::replace_transform
+},SOURCE{template<<2>,<3>>}>:char const * __ptr64:
+1,[2],3,4.87
+--------------------
+--------------------
+template<MO{
+ object = <2>
+ function = struct meta_traits::common_object::replace_transform
+},SOURCE{template<<3>>}>:float:
+1,2,[3],4.87
+--------------------
+--------------------
+template<MO{
+ object = <3>
+ function = struct meta_traits::common_object::replace_transform
+},SOURCE{template<>}>:double:
+1,2,3,[4.87]
+--------------------
+```
