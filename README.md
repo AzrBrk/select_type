@@ -990,7 +990,7 @@ The typeid operator of C++ may perform well in most situation, but it won't play
 except it specializes some cases of provided type:
 - a typelist, output template<...>, it ignore the typelist name since in a meta_stream, a typelist is regarded as only  a container
 - a type with a char type as template argument, output directly the char type content,
-- a type with a size_t type as template argment, output <I>(I is a size_t variable)
+- a type with a size_t type as template argment, output I(I is a size_t variable)
 - `meta_object` -see below
 - `meta_timer_object` -see below
 - `ip_stream`, `op_stream` -see below
@@ -1085,4 +1085,55 @@ template<MO{
 },SOURCE{template<>}>:double:
 1,2,3,[4.87]
 --------------------
+```
+also as I have mentioned in the very first of this tutorial the `exp_node` is the very basic data struct of all these utilities I've created in these library, you can easily use the while_constexpr to operate the `exp_node` link list.
+```cpp
+
+//use while_constexpr to iterate over the exp_vh_shared_node
+#include"meta_selectable_list.hpp"
+#include"exp_vh_node.hpp"
+
+
+using namespace meta_typelist;//provide meta programming utilities for while_constexpr
+
+//the exp_vh_node_node, unlike tuple, which is a structure, 
+//it is a link list that contains the different types of data
+struct node_forward_f
+{
+    //if you'd like to exam if a node is available, use this_type::next_pointer_type instead
+    //by that way you will iterate the node by the pointer, instead the element itself
+    template<class this_type, class ...> using apply = typename this_type::next_type;
+};
+
+template<class Node> using node_forward_o = meta_object<Node, node_forward_f>;
+
+struct node_forward_condition
+{
+    template<class this_type, class ...> struct apply
+    {
+        static constexpr bool value = this_type::has_next;
+    };
+};
+
+using node_forward_condition_o = meta_condition_c_o<node_forward_condition>;
+
+template<class Node> constexpr bool node_has_next = Node::has_next;
+
+int main()
+{
+    auto n = VH_NODE::make_vh_shared_nodes(1, 2.33, 4, 0.1f);
+    //the while_constexpr<...>::recursivly_transform_invoke ask you to provide 2 functions
+    //first is the main operation function
+    //second is how the data to be transformed
+    while_constexpr<node_forward_condition_o, node_forward_o<decltype(n)>>{}.recursivly_transform_invoke(
+        []<typename node>(node && nd)
+    {
+        std::cout << nd.value_ref() << ' ';
+    }, []<typename node>(node && nd) {
+        if constexpr (node_has_next<std::decay_t<node>>) { return nd.next_element(); }
+        else return nd;
+    }, std::move(n.next_element()/*the exp_vh_share_node uses an empty struct as first element to make sure the 
+    exp_vh_shared_node is always constructible with empty constructor even if there's reference type in the link list, so you have to ignore the first element*/)
+        );
+}
 ```
