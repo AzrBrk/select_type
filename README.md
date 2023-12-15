@@ -1035,7 +1035,7 @@ int main()
         meta_stream_o<exp_size<decltype(tp)>, 
         meta_replace_o, 
         ip_stream<meta_itoa<exp_size<decltype(tp)> - 1>>>
-    >{}.recursivly_invoke([]<class idx_o>(auto mtp){
+    >{}.recursively_invoke([]<class idx_o>(auto mtp){
         std::cout << delim << '\n';
         meta_print<idx_o>{}() << ":";
         meta_print<
@@ -1125,7 +1125,7 @@ int main()
     //the while_constexpr<...>::recursivly_transform_invoke ask you to provide 2 functions
     //first is the main operation function
     //second is how the data to be transformed
-    while_constexpr<node_forward_condition_o, node_forward_o<decltype(n)>>{}.recursivly_transform_invoke(
+    while_constexpr<node_forward_condition_o, node_forward_o<decltype(n)>>{}.recursively_transform_invoke(
         []<typename node>(node && nd)
     {
         std::cout << nd.value_ref() << ' ';
@@ -1137,3 +1137,4 @@ int main()
         );
 }
 ```
+Note that `node_forward_condition_o`, `node_forward_o` has already in the library, if you'd like to use the them
