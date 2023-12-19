@@ -1049,13 +1049,18 @@ int main()
    
  }
 ```
+In the meta function `wrap_at`, it firstly tranform the basic control string to a `selectable_list`, the `meta_typelist::selectable_list` is an iterator for a typelist, it references each element in the typelist, 
+so in each selection of index, we wrap the element with square brackets [] to highlight the selected result, and then delim all elements with ',' to output the tuple.
 
 The `while_constexpr` will recursivly invoke the a template functor until the meta looper return false, and it will try using its result type of each stage to realize the template functor,
-the above demo use a `meta_stream_object` which complex the code for only demonstrate the looping process, in the above demo, the `while_constexpr` fetch a value from a meta array that contains all indices
+the above demo use a `meta_stream_object` which complex the codes for only to demonstrate the looping process, in the above demo, the `while_constexpr` fetch a value from a meta array that contains all indices
 for each elements from the tuple `tp` once a time, it transfer the `meta_stream_object` to the lambda function just to show the transforming of the looping stage, the looping times is set the amounts of the
-elements in `tp`, it use the tuple_format, which is from the library of flex_string.hpp to show the select result.
+elements in `tp`.
 
-Likely output:
+it use the function `tuple_format`, which is from the library of `flex_string.hpp` to show the select result. it firstly transform the target tuple to a fstring type of string, and use a meta template alias as format control
+in this case, it uses the meta function `wrap_at`. You can apply this function with any tuple, it'll get the same effect, no matter how many elements there are in the tuple.
+
+Likely output(difference compiler will display different context, for example, in gcc, int will display as i):
 ```
 --------------------
 template<MO{
@@ -1086,6 +1091,8 @@ template<MO{
 1,2,3,[4.87]
 --------------------
 ```
+The `meta_print` will recognize a meta_object and display what the user cares about, it's object and function like the way `MO{object = o function = F}`, it will recognize an `ip_stream` and display it as a source.
+
 also as I have mentioned in the very first of this tutorial the `exp_node` is the very basic data struct of all these utilities I've created in these library, you can easily use the while_constexpr to operate the `exp_node` link list.
 ```cpp
 
