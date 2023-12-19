@@ -696,24 +696,20 @@ struct meta_ret_object
 	using meta_set = meta_ret_object<Outer_Obj, F, Ret>;
 };
 
-//use times as condition, when times is 0, the looper with end the loop progress
-template<size_t times, class MMO(Obj), class F>
+template<size_t times, class MMO(Obj), class F, class break_f = meta_always_continue>
 struct meta_timer_object
 {
-	template<size_t ts> struct timer_
-	{
-		static const bool value = (ts > 0);
-	};
-	using timer = timer_<times>;
+	using timer =meta_invoke<meta_break_if<break_f, quick_value_i_greater<times, 0>>, MMO(Obj)>;
+
 	using type = MMO(Obj);
 	template<class ...Arg>
-	using apply = meta_timer_object<times - 1, meta_invoke<F, MMO(Obj), Arg...>, F>;
+	using apply = meta_timer_object<times - 1, meta_invoke<F, MMO(Obj), Arg...>, F, break_f>;
 
 	template<class Outer_Obj>
-	using meta_set = meta_timer_object<times, Outer_Obj, F>;
+	using meta_set = meta_timer_object<times, Outer_Obj, F, break_f>;
 
 	template<size_t reset_time>
-	using reset = meta_timer_object<reset_time, MMO(Obj), F>;
+	using reset = meta_timer_object<reset_time, MMO(Obj), F, break_f>;
 };
 ```
 The meta object mostly use in the following looper structure:
