@@ -667,6 +667,7 @@ int main()
 ## Meta Programming For fstring
 ### Meta Object
 the meta data is not changable, while meta object can perform a changable-like behavior in a meta looper, in meta looper, the meta object recursivly change itself, the recursion is automatically done by looper, programmer doesn't need to do it manually.
+All the users has to do is to provide an object and a meta-function to describe how the changes is happened, further more, there are some common meta_object generators in namespace meta_traits::common_object, which helps you to quickly generate meta_objects.
 
 so far, there are 3 types of meta object in namespace meta_traits:
 ```cpp
