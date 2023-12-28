@@ -1027,8 +1027,7 @@ int main()
     std::tuple tp{1, "2", 3.f, 4.87};
 
     //track selected
-    while_constexpr<
-        meta_timer_cnd_o,
+    while_constexpr< // loop while the stream counter is available
         meta_stream_o<exp_size<decltype(tp)>, 
         meta_replace_o, 
         meta_istream<meta_itoa<exp_size<decltype(tp)> - 1>>>
