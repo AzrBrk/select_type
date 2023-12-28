@@ -717,6 +717,7 @@ The meta object mostly use in the following looper structure:
 ```cpp
 
 	//Note: looper returns a meta object, not the context itself
+	//Note: with the macro MMO, it requires the template class to be a meta_object
 	template<bool, class MMO(Condition), class MMO(Obj), class MMO(Generator) = meta_object<meta_empty, meta_empty_fn>> struct meta_looper
 	{
 			
@@ -738,22 +739,21 @@ The meta object mostly use in the following looper structure:
 			using next_stage = meta_looper<_continue_, MMO(Condition), result_stage_o, generator_stage_o>;
 
 			//recursively loop for result
-			using track_apply_t =typename meta_looper<
+			using track_apply_t = meta_invoke<invoke_meta_function_if<_continue_>, meta_looper<
 				_continue_, 
 				MMO(Condition),
 				result_stage_o,
 				generator_stage_o
-			>::template apply<Args...>;
+			>, Args...>;
 			using type = typename track_apply_t::type;
 		};
 	};
 
+
 	template<class Cond, class MO, class Generator> struct meta_looper<false, Cond, MO, Generator>
 	{
-		template<class ...Args> struct apply
-		{
-			using type = MO;
-		};
+		static constexpr bool _continue_ = false;
+		using type = MO;
 	};
 ```
 here is the example of using meta object to realize a type selection
@@ -1031,7 +1031,7 @@ int main()
         meta_timer_cnd_o,
         meta_stream_o<exp_size<decltype(tp)>, 
         meta_replace_o, 
-        ip_stream<meta_itoa<exp_size<decltype(tp)> - 1>>>
+        meta_istream<meta_itoa<exp_size<decltype(tp)> - 1>>>
     >{}.recursively_invoke([]<class idx_o>(auto mtp){
         std::cout << delim << '\n';
         meta_print<idx_o>{}() << ":";
