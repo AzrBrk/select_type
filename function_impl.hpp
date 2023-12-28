@@ -16,7 +16,7 @@ namespace function_impl
 		meta_function(TL<L...> const& tl, F const& f) :func(f) {}
 		auto operator()(L...l)
 		{
-			return func.template operator()<L...>(std::forward<L>(l)...);
+			return func.template operator() < L... > (std::forward<L>(l)...);
 		}
 	};
 
@@ -24,7 +24,7 @@ namespace function_impl
 	meta_function(TL<L...>const& tl, F const& f) -> meta_function<TL<L...>, F>;
 
 	template<class TL, class F>
-	auto realize_meta(F const & f)
+	auto realize_meta(F const& f)
 	{
 		return meta_function{ TL(), f };
 	}
@@ -55,5 +55,5 @@ namespace function_impl
 
 	template<auto fn_ptr>
 	using fn_t = std::remove_pointer_t<decltype(fn_ptr)>;
-	
+
 }

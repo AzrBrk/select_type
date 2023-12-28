@@ -1,13 +1,18 @@
 #pragma once
 
 #include"meta_object_traits.hpp"
+#include"alias_arguments_count.hpp"
 
 
 
 namespace meta_typelist
 {
-	using namespace::meta_traits;
-	using namespace::meta_traits::common_object;
+	using namespace meta_traits;
+	using namespace meta_traits::common_object;
+	
+
+	//define meta_stream object
+	//meta stream contains an input stream (From) and an output stream (To)
 	template<class MMO(To), class MMO(From)> struct meta_stream
 	{
 		using from =MMO(From);
@@ -17,7 +22,6 @@ namespace meta_typelist
 			typename invoke_object_if<(exp_size<typename MMO(From)::type> > 0)>
 			::template apply<MMO(To), MMO(From)>, meta_invoke<MMO(From)>
 		>;
-		template<class F> using apply = meta_invoke<F, MMO(To), MMO(From)>;
 	};
 	struct meta_stream_f
 	{
@@ -25,34 +29,38 @@ namespace meta_typelist
 		using apply = typename mo_stream::update;
 	};
 
+	//common output stream
 	template<class TL>
-	using op_stream = meta_appendable_o<TL>;
+	using meta_ostream = meta_appendable_o<TL>;
+
+	//common input stream
 	template<class TL>
-	using ip_stream = meta_ret_decreasible_o<TL>;
+	using meta_istream = meta_ret_decreasible_o<TL>;
 
-	template<size_t N> using meta_integer_ip_stream = meta_ret_decreasible_o<typename meta_itoa<N>::template to<decrease_list>>;
+	//a stream that generate increasing integer
+	template<size_t N> using meta_integer_istream = meta_ret_decreasible_o<typename meta_itoa<N>::template to<decrease_list>>;
 
-	template<size_t Transfer_Length, class MMO(To), class MMO(From)> 
-		requires (size_of_type_list<typename MMO(From)::type>::value >= Transfer_Length)
+	//the meta_stream_object is based on meta_timer_object
+	//add a break condition if you try to block the stream
+	template<size_t Transfer_Length, class MMO(To), class MMO(From), class break_f = meta_always_continue> 
+		//requires (size_of_type_list<typename MMO(From)::type>::value >= Transfer_Length)
 		using meta_stream_o = meta_timer_object<
 		Transfer_Length,
 		meta_stream< MMO(To), MMO(From)>,
-		meta_stream_f
+		meta_stream_f,
+		break_f
 		>;
-	template<class MMO(To), class MMO(From)>
+	//do all transfer between two meta_object
+	//add a break condition if you try to block the stream
+	template<class MMO(To), class MMO(From), class break_f = meta_always_continue>
 	using meta_all_transfer = typename meta_timer_looper_t<
-		meta_stream_o<size_of_type_list<typename MMO(From)::type>::value, MMO(To), MMO(From)>
+		meta_stream_o<size_of_type_list<typename MMO(From)::type>::value, MMO(To), MMO(From), break_f>
 	>::type;
 
-	struct meta_linker
-	{
-		template<class MMO(op), class MMO(ip), class F> struct apply
-		{
-			using op = meta_invoke<MMO(op), meta_invoke<F, typename MMO(ip)::ret>>;
-			using ip = meta_invoke<MMO(ip)>;
-			using type =typename meta_all_transfer<op, ip>::to::type;
-		};
-	};
+	//a stream that will tranfer all types in From to To 
+	template<class MMO(To), class MMO(From), class break_f = meta_always_continue> using meta_all_transfer_o = meta_stream_o<size_of_type_list<typename MMO(From)::type>::value, MMO(To), MMO(From), break_f>;
+
+	
 
 	template<class MMO(stream)> struct Meta_Stream_Transfer {};
 	template<size_t Transfer_Length, class MMO(To), class MMO(From)>
@@ -68,7 +76,15 @@ namespace meta_typelist
 	template<class MMO(stream)> using meta_stream_transfer_timer = typename Meta_Stream_Transfer<MMO(stream)>::timer;
 
 	
-	
+	struct meta_linker
+	{
+		template<class MMO(op), class MMO(ip), class F> struct apply
+		{
+			using op = meta_invoke<MMO(op), meta_invoke<F, typename MMO(ip)::ret>>;
+			using ip = meta_invoke<MMO(ip)>;
+			using type = typename meta_all_transfer<op, ip>::to::type;
+		};
+	};
 
 	template<class ...Typs>
 	struct selectable_list;
@@ -82,7 +98,7 @@ namespace meta_typelist
 	{
 		template<class TL>
 		using transfer_s = typename meta_timer_looper_t<
-			meta_stream_o<N, op_stream<meta_clear_t<TL>>,ip_stream<TL>>
+			meta_stream_o<N, meta_ostream<meta_clear_t<TL>>,meta_istream<TL>>
 		>::type;
 		template<class TL>
 		using back = typename transfer_s<TL>::from::type;
@@ -102,6 +118,68 @@ namespace meta_typelist
 		static const size_t value = N;
 	};
 
+	//quickly create quoted-meta-functions from the unquoted ones
+	namespace quick_meta
+	{
+		using namespace alias_c;
+
+		template<template<class ...> class al_f, class ...Args> struct invoke_alias
+		{
+			//this invoker calculate the needed arguments from the alias function and automatically apply it
+			using real_args_list_so = meta_stream_o<alias_argc<al_f>(), meta_ostream<exp_list<>>, meta_istream<exp_list<Args...>>>;
+			using type = quick_invoke(meta_stream_transfer<real_args_list_so>,to)<al_f>;
+		};
+
+		template<template<class...> class unquoted_meta_fn> struct quick_construct
+		{
+			template<class ...Args> using apply = get_type<invoke_alias<unquoted_meta_fn, Args...>>;
+		};
+
+		template<class T> struct quick_nested
+		{
+			template<class Unused = void> using apply = T;
+		};
+
+		template<template<class...> class unquoted_meta_fn, class ...Bounded_Fn_Args> struct quick_construct_bind
+		{
+			template<class ...Args> using apply = get_type<invoke_alias<unquoted_meta_fn, Bounded_Fn_Args..., Args...>>;
+		};
+
+		template<template<class...> class unquoted_meta_fn, template<class ...> class args_transform, class ...Bounded_Fn_Args>
+		struct quick_construct_bind_transform_args
+		{
+			template<class ...Args> using apply = get_type<invoke_alias<unquoted_meta_fn, Bounded_Fn_Args..., args_transform<Args>...>>;;
+		};
+
+		template<template<class> class F> struct quick_meta_object_function_single_to_object
+		{
+			template<class _1, class ...> using apply = F<_1>;
+		};
+
+		template<template<class, class> class F> struct quick_meta_object_function
+		{
+			template<class _1, class _2> struct apply : F<_1, _2>{};
+		};
+
+		template<template<class, class> class F, class _2> struct quick_meta_object_function_bind
+		{
+			template<class this_obj, class ...> struct apply : F<this_obj, _2>
+			{};
+		};
+
+		template<template<class, class> class F, class T> struct quick_meta_object_function_ignored_this
+		{
+			template<class this_obj, class mo_arg> struct apply :F<T, mo_arg> {};
+		};
+
+		
+	}
+	
+	template<class mso> using stream_final_t = typename mso::to::type;
+	template<class F> struct meta_stream_op
+	{
+		template<class mso, class ...Args> using apply = meta_invoke<F, typename mso::to::type, Args...>;
+	};
 	
 	template<class ...Typs>
 	struct selectable_list : exp_list<Typs...>
@@ -136,7 +214,9 @@ namespace meta_typelist
 			
 			using tag =typename transform_to<_tag<N>>;
 
-			using erase =typename experiment::erase_at_t<N, selectable_list<Typs...>>::type;
+			template<size_t NS> using tag_to = transform_to<_tag<NS>>;
+
+			//using erase =typename experiment::erase_at_t<N, selectable_list<Typs...>>::type;
 
 			template<size_t idx>
 			using swap_with = typename meta_swap<exp_repeat::Idx<N>, exp_repeat::Idx<idx>, selectable_list<Typs...>>::type;
@@ -189,5 +269,18 @@ namespace meta_typelist
 
 	using unique_type_list_o = common_object::meta_appendable_filter_o<exp_list<>, unique_type_list>;
 
-	template<class TL> using make_unique_list = typename meta_all_transfer<unique_type_list_o, ip_stream<TL>>::to::type;
+	template<class TL> using make_unique_list = typename meta_all_transfer<unique_type_list_o, meta_istream<TL>>::to::type;
+
+	template<class TL, class MArr> struct meta_swap2_type
+	{
+		using iter = to_selectable_t<TL>;
+		static constexpr size_t pos1 = MArr::at<0>::value;
+		static constexpr size_t pos2 = MArr::at<1>::value;
+
+		using first_transformed = typename iter::template invoke<pos1>::template replace_with<exp_select<pos2, TL>>;
+		using type = typename first_transformed::template invoke<pos2>::template replace_with<exp_select<pos1, TL>>;
+
+	};
+
+	
 }

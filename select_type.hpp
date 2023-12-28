@@ -67,16 +67,19 @@ struct is_empty_list<TL<>>
 template<class T>
 struct max_type_list_index
 {
-	static_assert(exp_size<T> != 0, "Can not provide index from an empty list!");
+	//static_assert(exp_size<T> != 0, "Can not provide index from an empty list!");
 	static constexpr auto value = size_of_type_list<T>::value - 1;
 };
 
 template<class TL> constexpr size_t max_index = max_type_list_index<TL>::value;
 
 struct end_of_list {};
+
 template<class L>
 struct split_first
 {
+	using type = end_of_list;
+	using rest = end_of_list;
 };
 
 template<template<class...> class TL, class T, class ...L>
@@ -197,12 +200,15 @@ struct is_one_of_type<false, 0, C, T>
 	static const size_t index = size_of_type_list<T>::value;
 };
 
+
+
 template<class C, class T>
 using exp_is_one_of
 = is_one_of_type <
 	exp_cmp<max_type_list_index<T>::value,C, T>::value,
 	max_type_list_index<T>::value,
 	C, T>;
+
 
 
 
@@ -363,6 +369,8 @@ struct element_ <false, N, TL, Pointer_Wrapper>
 	void set_next(next_pointer_type p) { next = p; }
 	next_type& next_element() { return *next; }
 
+	next_type& next_element() const { return *next; }
+
 	element_(e_type const& e) :value(e) {}
 
 	template<class En = std::enable_if_t<std::is_trivially_constructible_v<e_type>>>
@@ -488,8 +496,8 @@ struct reference_pointer_impl<T&>
 	reference_pointer_impl() {}
 	reference_pointer_impl(T& ref) :ptr(&ref) {};
 	reference_pointer_impl(const reference_pointer_impl& rp) :ptr(rp.ptr) {};
-	operator T& () { return *ptr; }
-	operator T() { return *ptr; }
+	operator T& () const { return *ptr; }
+	operator T() const { return *ptr; }
 	reference_pointer_impl& operator=(T& ref) { 
 		ptr = &ref; 
 		return *this;
@@ -505,7 +513,7 @@ struct reference_pointer_impl<T&>
 	}
 };
 template<class T>
-reference_pointer_impl<T&> const& exp_ref(T& ref) { return { ref }; }
+reference_pointer_impl<T&> exp_ref(T& ref) { return { ref }; }
 
 template<class T>
 struct remove_const_ref {
@@ -672,6 +680,10 @@ T fetch_value(T& va, Exp_iter& it);
 template<class _node>
 struct exp_iterator
 {
+	template<class T>
+	exp_iterator(T const& node) noexcept :first_node(node) {}
+	exp_iterator(_node& _n) noexcept:first_node(_n) {}
+
 	_node& first_node;
 	size_t exp_index{ 0 };
 
@@ -681,7 +693,7 @@ struct exp_iterator
 	}
 
 
-	exp_iterator(_node& _n) :first_node(_n) {}
+	
 
 
 	template<class T>
@@ -704,7 +716,7 @@ struct exp_iterator
 		class it_type,
 		class En = std::enable_if_t<is_wrapped_with<it_type, exp_iterator>::value>
 	>
-	bool operator !=(it_type another) { 
+	bool operator !=(it_type const& another) { 
 		return this->exp_index != another.exp_index;
 	}
 	template<class T, 
@@ -726,7 +738,8 @@ struct exp_iterator
 		);
 		return _reflex;
 	}
-	exp_iterator<_node>& operator=(const exp_iterator<_node> & it)
+	template<class out_node>
+	exp_iterator<_node>& operator=(const exp_iterator<out_node> & it)
 	{
 		auto node_transfer = [this](auto const& value) {(*this) = value; };
 		do_at(it.first_node, node_transfer, it.exp_index);
@@ -750,8 +763,7 @@ struct exp_iterator
 		return s;
 	}
 
-	template<class T>
-	exp_iterator(T const& value) :first_node(value) {}
+	
 
 	template<class T, class construct_f>
 	void exp_push_back(T const& value, construct_f&& f)
@@ -767,7 +779,7 @@ struct exp_iterator
 		do_at(_n.first_node, input, _n.exp_index);
 		return is;
 	}
-	friend std::ostream& operator <<(std::ostream& os, exp_iterator<_node>& _n)
+	friend std::ostream& operator <<(std::ostream& os, exp_iterator<_node>const & _n)
 	{
 		auto output = [&os]<class VT>(VT& value)->void
 			{
@@ -776,6 +788,11 @@ struct exp_iterator
 			};
 		do_at(_n.first_node, output, _n.exp_index);
 		return os;
+	}
+	template<class F>
+	constexpr void transform(F&& f)
+	{
+		do_at(first_node, f, exp_index);
 	}
 };
 
@@ -865,6 +882,7 @@ template<class _node, class Tuple> void get_from_tuple(_node& _n, Tuple& tp)
 		ff.call(_n.next_element(), tp);
 	}
 }
+//stored reference to tuple manipulate a tuple
 template<class Tuple>
 struct tuple_iterator
 {
@@ -885,17 +903,33 @@ struct tuple_iterator
 template<class ...L>
 tuple_iterator(std::tuple<L...>& tp) -> tuple_iterator<std::tuple<L...>>;
 
+template<class T> struct node_transform_decay { using type = std::decay_t<T>; };
+
+template<class T> struct node_transform_decay<reference_pointer_impl<T&>>
+{
+	using type = std::decay_t<T>&;
+};
+
+template<class T> struct node_transform_decay<const reference_pointer_impl<T&>&>
+{
+	using type = std::decay_t<T>&;
+};
+
+template<class T> using node_transform_decay_t = typename node_transform_decay<T>::type;
+
+template<class T> struct typeid_cv_ref_keeper {};
+
 struct shared_constructor
 {
 	template<class Ty, class T>
-	std::shared_ptr<Ty> operator()(T const& value)
+	std::shared_ptr<Ty> operator()(T && value)
 	{
-		if constexpr (std::is_same<typename Ty::e_type, T>::value)
+		if constexpr (std::is_same<typename Ty::e_type, node_transform_decay_t<T>>::value)
 		{
-			return construct<Ty>(value);
+			return construct<Ty>(std::forward<T>(value));
 		}
 		else {
-			std::cout << "warning: type_mismatched: " << typeid(typename Ty::e_type).name() << "," << typeid(value).name() << std::endl;
+			std::cout << "warning: type_mismatched: " << typeid(typeid_cv_ref_keeper<typename Ty::e_type>).name() << "," << typeid(typeid_cv_ref_keeper<node_transform_decay_t<T>>).name() << std::endl;
 			return nullptr;
 		}
 	}

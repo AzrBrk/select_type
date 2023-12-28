@@ -36,7 +36,7 @@ namespace exp_print
 			return os;
 		}
 	};
-	template<class TL> struct meta_print<ip_stream<TL>>
+	template<class TL> struct meta_print<meta_istream<TL>>
 	{
 		std::ostream& operator()(std::ostream & os= std::cout)
 		{
@@ -45,7 +45,7 @@ namespace exp_print
 			return os;
 		}
 	};
-	template<class TL> struct meta_print<op_stream<TL>>
+	template<class TL> struct meta_print<meta_ostream<TL>>
 	{
 		std::ostream& operator()(std::ostream& os = std::cout)
 		{
@@ -66,11 +66,12 @@ namespace exp_print
 		}
 	};
 
-	template<size_t I, class obj, class F> struct meta_print<meta_timer_object<I, obj, F>>
+	template<size_t I, class obj, class F, class B> struct meta_print<meta_timer_object<I, obj, F, B>>
 	{
 		std::ostream& operator()(std::ostream& os = std::cout)
 		{
-			os << "TIMER<" << I << ">";
+			os << "TIMER<" << I << ">:(break_condition:";
+			meta_print<B>{}(os) << ")\n";
 			meta_print<meta_object<obj, F>>{}(os);
 			return os;
 		}

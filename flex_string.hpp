@@ -48,6 +48,7 @@ namespace flex_string
 			template<class Ty1, class Ty2>
 			using apply = std::_Select<cond>::_Apply<Ty1, Ty2>;
 		};
+		//generate repeat types in typelist
 		namespace repeator
 		{
 			template<class...TS> struct repeat_list :exp_list<TS...> {};
@@ -63,7 +64,7 @@ namespace flex_string
 				struct append_f
 				{
 					template<class thisMO, class TL>
-					using apply = typename meta_all_transfer<op_stream<thisMO>, ip_stream<TL>>::to::type;
+					using apply = typename meta_all_transfer<meta_ostream<thisMO>, meta_istream<TL>>::to::type;
 				};
 				using type = typename meta_timer_looper_t<
 					meta_timer_object<N, repeat_list<>, append_f>,
@@ -72,7 +73,7 @@ namespace flex_string
 			};
 
 			
-
+			//only repeat_list will be repeatly generated
 			template<class T>
 			struct is_repeat_list : std::false_type{};
 
@@ -132,7 +133,6 @@ namespace flex_string
 				using type = typename meta_all_transfer<op, ip>::to::type;
 			};
 			template<class ...Typs> using repeat_raw = typename decl_repeat<exp_list<Typs...>>::type;
-			
 		}
 		namespace delimiter
 		{
@@ -149,7 +149,7 @@ namespace flex_string
 				get_type<exp_empty<TL>>, 
 				delimiter_append_f<type_delimiter>
 			>;
-			template<class TL> using delimiter_ip_stream = ip_stream<TL>;
+			template<class TL> using delimiter_ip_stream = meta_istream<TL>;
 
 			template<class TL, class type_delimiter> struct delim_impl 
 			{
@@ -165,6 +165,7 @@ namespace flex_string
 		
 
 		}
+		//wrapped typelists in typelist
 		namespace join
 		{
 			
@@ -172,6 +173,7 @@ namespace flex_string
 			{
 				template<class ThisMO, class T> struct join_append
 				{
+					//directly join a type if it is not a typelist
 					using type = get_type<
 						exp_join_impl<ThisMO, T>
 					>;
@@ -179,18 +181,21 @@ namespace flex_string
 				template<class ThisMO, template<class ...> class TL, class ...L> 
 				struct join_append<ThisMO, TL<L...>>
 				{
+					//unwrapped if it is a typelist
 					using type = get_type<
 						exp_join<ThisMO, TL<L...>>
 						>;
 				};
 				template<class ThisMO, class T, class...> using apply = get_type<join_append<ThisMO, T>>;
 			};
-			template<class TL> using meta_join_append_o = meta_object<typename exp_empty<TL>::type, join_append_f>;
+
+			//output stream at
+			template<class TL> using meta_join_append_o = meta_object<get_type<exp_empty<TL>>, join_append_f>;
 
 			template<class ...Typs> struct join_list_impl :exp_list<Typs...> 
 			{
 				using op = meta_join_append_o<exp_list<Typs...>>;
-				using ip = ip_stream<exp_list<Typs...>>;
+				using ip = meta_istream<exp_list<Typs...>>;
 				using type = typename meta_all_transfer<op, ip>::to::type;
 			};
 
@@ -215,7 +220,8 @@ namespace flex_string
 				static constexpr bool value = std::is_base_of_v<exp_list<TS...>, TL<TS...>>;
 			};
 			template<class TL> constexpr bool is_exp_list_based_v = is_exp_list_based<TL>::value;
-
+			
+			//requires exp_list to perform the transforming chain
 			template<class exp_list_based_tl> requires is_exp_list_based_v<exp_list_based_tl>
 			constexpr bool is_all_joined_v = exp_list_based_tl
 				::template to<all_is_true_list>
@@ -253,7 +259,7 @@ namespace flex_string
 		{
 			template<char WL, char WR> struct chars_wrapper
 			{
-				static_assert((WL != '{' && WR != '}'),"forbid using of format default contol characters");
+				static_assert((WL != '{' && WR != '}'),"forbid using of format default control characters");
 				using left = char_val<WL>;
 				using right = char_val<WR>;
 				template<class T> using apply = chars<left, T, right>;
@@ -291,7 +297,7 @@ namespace flex_string
 						to_selectable_t<TL>, 
 						wrap_with_indices_f
 					>;
-					using idx_ip_stream = ip_stream<idx_type_container<TS...>>;
+					using idx_ip_stream = meta_istream<idx_type_container<TS...>>;
 
 					using wrap = meta_all_transfer<wrap_op_stream<exp_list<cs...>>, idx_ip_stream>::template to::type;
 
@@ -317,6 +323,8 @@ namespace flex_string
 
 			template<class ...TS> using tag_list = typename tag_list_type<TS...>::type;
 		}
+
+		//provide indices from a typelist, with a condition meta-function
 		namespace select_if_space
 		{
 			template<template<class> class F> struct select_if_f
@@ -325,7 +333,7 @@ namespace flex_string
 				template<class TO, template<size_t, class> class idx_tag, size_t I, class T, class ...TS>
 				struct apply<TO, idx_tag<I, T>, TS...>
 				{
-					//a fliter flites all elements that follow the meta functions rule
+					//a filter filtes all elements that follow the meta functions rule
 					//so a negation is needed to get types those follow the functions rule
 					static constexpr bool value = !F<T>::value;
 				};
@@ -339,6 +347,9 @@ namespace flex_string
 			template<template<class> class F,class TL>
 			using select_if_impl =typename meta_all_transfer<select_if_op<F>, select_if_ip<TL>>::template to::type;
 
+			template<template<class> class F, class TL>
+			using select_if_stream = meta_stream_o<exp_size<TL>, select_if_op<F>, select_if_ip<TL>>;
+
 			//only indices are what needed so types will be erased
 			template<class> struct get_rid_of_type {};
 			template<template<size_t, class> class tag_list_t, size_t ...I, class ...TS>
@@ -347,6 +358,7 @@ namespace flex_string
 				using type = meta_array<I...>;
 			};
 
+			//return a meta-array with the indices of selected elements
 			template<template<class> class F, class TL> using select_if_list = typename get_rid_of_type<
 				select_if_impl<F, TL>
 			>::type;
@@ -360,7 +372,7 @@ namespace flex_string
 				{
 					using front = typename meta_spliter<N>::template front<TL>;
 					using back = typename meta_spliter<N + L>::template back<TL>;
-					using delete_part = typename meta_all_transfer<op_stream<front>, ip_stream<back>>::to::type;
+					using delete_part = typename meta_all_transfer<meta_ostream<front>, meta_istream<back>>::to::type;
 				};
 			};
 			template<class ...Typs> struct partially : exp_list<Typs...>
@@ -388,8 +400,8 @@ namespace flex_string
 					template<class ThisTL, bool rest_is_enough_to_decrease> struct group_decrease_impl
 					{
 						using type = typename meta_stream_transfer_mo<
-							meta_stream_o<N, op_stream<exp_list<>>,
-							ip_stream<ThisTL>>
+							meta_stream_o<N, meta_ostream<exp_list<>>,
+							meta_istream<ThisTL>>
 							>::from::type;
 					};
 					template<class ThisTL> struct group_decrease_impl<ThisTL, false>
@@ -404,8 +416,8 @@ namespace flex_string
 					template<class ThisTL, bool rest_is_enough_to_ret> struct group_decrease_ret_impl
 					{
 						using type = meta_stream_transfer<
-							meta_stream_o<N, op_stream<exp_list<>>,
-							ip_stream<ThisTL>>
+							meta_stream_o<N, meta_ostream<exp_list<>>,
+							meta_istream<ThisTL>>
 							>;
 					};
 
@@ -415,10 +427,11 @@ namespace flex_string
 					};
 					template<class ThisTL, class...> using apply = typename group_decrease_ret_impl<ThisTL, (exp_size<ThisTL> >= N)>::type;
 				};
+
 				template<size_t N>
 				using group_stream_o = meta_stream_o<
 					(exp_size<TL> / N),
-					op_stream<exp_list<>>,
+					meta_ostream<exp_list<>>,
 					meta_ret_object<TL, group_decrease<N>,
 					group_decrease_ret<N>>
 					>;
@@ -431,6 +444,13 @@ namespace flex_string
 					using rest = typename meta_stream_transfer_mo<group_stream_o<N>>::from::type;
 				};
 			};
+
+			template<size_t N, class TL> struct group_decreasible_o_impl
+			{
+				using type = typename group<TL>::template group_type<N>::grouped;
+			};
+
+			template<size_t N, class TL> using meta_group_ret_decreasible_o = meta_ret_decreasible_o<typename group_decreasible_o_impl<N, TL>::type>;
 
 			template<class F> struct group_foreach_apply
 			{
@@ -445,17 +465,16 @@ namespace flex_string
 			};
 		}
 		//transform all types that matches an bool meta_function into to be deleted type
-//use a meta stream to filter the typelist.
+		//use a meta stream to filter the typelist.
 		namespace delete_if
 		{
 
 			template<typename ...TS> using common_typelist_ref = static_wrap::wrap_list<TS...>;
 
 			struct to_be_deleted{};
-			struct delete_conv_f
-			{
-				template<typename T> using apply = to_be_deleted;
-			};
+
+			using delete_conv_f = quick_meta::quick_nested<to_be_deleted>;
+			
 
 			struct delete_filter_f
 			{
@@ -477,7 +496,7 @@ namespace flex_string
 
 				using delete_conv_typelist = typename list_ref::template with_indices<idx_t_v, delete_conv_f>::wrap;
 
-				using type = typename meta_all_transfer<delete_filter_o, ip_stream<delete_conv_typelist>>::to::type;
+				using type = typename meta_all_transfer<delete_filter_o, meta_istream<delete_conv_typelist>>::to::type;
 			};
 
 			template<typename TL, template<typename ...> typename F> using meta_delete_if = get_type<
@@ -487,7 +506,116 @@ namespace flex_string
 			template<typename TL, template<typename ...> typename F> constexpr size_t meta_delete_if_count =
 				exp_size<typename meta_delete_if_impl<TL, F>::idx_t_v>;
 		}
+		namespace place_holder
+		{
+			template<size_t I> struct _ :quick_value_i<I> {};
 
+			using _0 = _<0>;
+			using _1 = _<1>;
+			using _2 = _<2>;
+			using _3 = _<3>;
+			using _4 = _<4>;
+			using _5 = _<5>;
+			using _6 = _<6>;
+			using _7 = _<7>;
+			using _8 = _<8>;
+			using _9 = _<9>;
+			using _10 = _<10>;
+
+			using meta_placeholder_istream = meta_istream<exp_list<_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10>>;
+
+			template<size_t N> using placeholder_gen = meta_stream_transfer<
+				meta_stream_o<N, meta_ostream<exp_list<>>,
+				meta_placeholder_istream>
+			>;
+
+
+
+			template<class T> struct is_placeholder :std::false_type {};
+
+			template<template<size_t> class ph_type, size_t I> struct is_placeholder<ph_type<I>> : std::true_type {};
+
+
+
+			template<class TL, size_t I> struct meta_selectable_iterator
+			{
+				using invoke = to_selectable_t<TL>::template invoke<I>;
+				using type = to_selectable_t<TL>::template get<I>;
+				using next = meta_selectable_iterator<TL, I + 1>;
+				template<class F>
+				using invoke_and_iterate = meta_selectable_iterator<meta_invoke<F, invoke>, I + 1>;
+
+				using typelist = TL;
+			};
+
+
+			template<size_t I>
+			struct tag_with_f
+			{
+				template<class IVK> using apply = IVK::template tag_to<I>;
+			};
+
+			struct tag_with_of
+			{
+				template<class this_iter, class idx_type> using apply =
+					this_iter::template invoke_and_iterate<tag_with_f<idx_type::value>>;
+			};
+
+			template<class TL> using meta_tag_ostream = meta_object<meta_selectable_iterator<TL, 0>, tag_with_of>;
+
+			template<class TL, class Meta_array> struct tag_with_indices
+			{
+				using meta_array_istream = meta_istream<typename Meta_array::cv_typelist>;
+				using type = typename meta_stream_transfer<meta_all_transfer_o<meta_tag_ostream<TL>, meta_array_istream>>::typelist;
+			};
+
+			template<template<class ...> class al> struct alias_container
+			{
+				template<class ...types> using alias = al<types...>;
+			};
+
+			template<class AL> struct alias_extract
+			{};
+
+			template<template<class ...> class AL, class ...Args> struct alias_extract<AL<Args...>>
+			{
+				template<class ...TS>
+				using alias = AL<TS...>;
+			};
+
+			template<class TL> class bound_list {};
+			template<template<class...> class TL, class ...Args> struct bound_list<TL<Args...>>
+			{
+				using indices = select_if_space::select_if_list<is_placeholder, tag::tag_list<Args...>>;
+			};
+
+			template<class Bound_L, class ...Args> struct invoke_bound_list_impl
+			{
+				using alias_keep = alias_extract<Bound_L>;//during the transformation, the bounded list will be transformed into
+				//selectable_list to use the meta iterator, so the alias must be stored to recover the original functionalities
+				using bl_indices = typename bound_list<Bound_L>::indices;
+				using tagged_gen = typename tag_with_indices<exp_list<Args...>, bl_indices>::type;
+				struct replace_with_tagged_of
+				{
+					template<class this_tl, class T> struct apply_impl { using type = this_tl; };
+					template<class this_tl, template<size_t, class> class tag_t, size_t I, class T>
+					struct apply_impl<this_tl, tag_t<I, T>> {
+						using type = typename
+							meta_selectable_iterator<this_tl, I>
+							::invoke::template replace_with<T>;
+					};
+					template<class this_tl, class T> using apply = typename apply_impl<this_tl, T>::type;
+				};
+				//use meta stream to perform transforming
+				using bound_list_replace_ostream = meta_object<Bound_L, replace_with_tagged_of>;
+				using bound_list_replace_istream = meta_istream<tagged_gen>;
+
+				using type = meta_stream_transfer<meta_all_transfer_o<bound_list_replace_ostream, bound_list_replace_istream>>
+					::template to<alias_keep::template alias>;
+			};
+
+			template<class bound_l, class ...Args> using places_arguments = typename invoke_bound_list_impl<bound_l, Args...>::type;
+		}
 		template<const char* sptr, size_t ...indices>
 		struct static_str_impl
 		{
@@ -532,14 +660,15 @@ namespace flex_string
 		{
 			using CL1_front = meta_spliter<N>::front<CL1>;
 			using CL1_back = meta_spliter<N>::back<CL1>;
-			using add_CL2_to_CL1_front = typename meta_all_transfer<op_stream<CL1_front>, ip_stream<CL2>>::to::type;
-			using type = typename meta_all_transfer<op_stream<add_CL2_to_CL1_front>, ip_stream<CL1_back>>::to::type;
+			using add_CL2_to_CL1_front = typename meta_all_transfer<meta_ostream<CL1_front>, meta_istream<CL2>>::to::type;
+			using type = typename meta_all_transfer<meta_ostream<add_CL2_to_CL1_front>, meta_istream<CL1_back>>::to::type;
 		};
 		template<size_t N, class CL1, class CL2>
 		constexpr auto static_insert(CL1, CL2) -> get_type<insert_impl<N, CL1, CL2>>
 		{
 			return {};
 		}
+
 
 
 		
@@ -562,11 +691,12 @@ namespace flex_string
 
 	//the fstring is a string constains various types of data
 	//each element in the string accessible through providing index 
+	//featuring meta stream format control
 	template<class ...Typs> requires check_formatible_v<Typs...>
-	struct fstring :VH_NODE::node_struct<Typs...>
+	struct fstring :vh_node::node_struct<Typs...>
 	{
 		fstring() {}
-		fstring(Typs&&...typs) :VH_NODE::node_struct<Typs...>(std::move(typs)...) {}
+		fstring(Typs&&...typs) :vh_node::node_struct<Typs...>(std::move(typs)...) {}
 
 		using fs_bracket = meta_string_stream::repeator::repeat_list<lbracket, rbracket>;
 
@@ -584,7 +714,7 @@ namespace flex_string
 				exp_list<Typs...>
 				>(string_maker)
 			);
-			loop_with(VH_NODE::node_struct<Typs...>::members.next_element(),
+			loop_with(vh_node::node_struct<Typs...>::members.next_element(),
 				[&binder](auto& value) {binder.bind(value); });
 			return binder();
 		}
@@ -612,7 +742,7 @@ namespace flex_string
 				exp_list<Typs...>
 				>(string_maker)
 			);
-			loop_with(VH_NODE::node_struct<Typs...>::members.next_element(),
+			loop_with(vh_node::node_struct<Typs...>::members.next_element(),
 				[&binder](auto& value) {binder.bind(value); });
 			return binder();
 		}
@@ -634,19 +764,18 @@ namespace flex_string
 				exp_list<Typs...>
 				>(string_maker)
 			);
-			loop_with(VH_NODE::node_struct<Typs...>::members.next_element(),
+			loop_with(vh_node::node_struct<Typs...>::members.next_element(),
 				[&binder](auto& value) {binder.bind(value); });
 			return binder();
 		}
-
+		//use template alias function to control the format
 		template<template<class> class transform_fn > auto transformed_string() const
 		{
-			using original_cs = decltype(control_str());
-			return std::move(exp_to_string<transform_fn<original_cs>>());
+			return exp_to_string<transform_fn<decltype(control_str())>>();
 		}
 		template<template<class, class> class transformed_this_fn> auto transformed_string() const 
 		{
-			return std::move(exp_to_string<transformed_this_fn<decltype(control_str()), fstring<Typs...>>>());
+			return exp_to_string<transformed_this_fn<decltype(control_str()), fstring<Typs...>>>();
 		}
 		
 	};
@@ -747,6 +876,27 @@ namespace flex_string
 	
 #define	EXP_STATIC_STR(x) static_str<(sizeof x) - 1, x> 
 #define	EXP_STATIC_TO_STR(x) static_to_str<x, x::length>::type::str
+#define quick_sstr(name, str) static constexpr char name##_impl[]{str};\
+using name = EXP_STATIC_STR(name##_impl);
+
+	namespace fold
+	{
+		template<class obj, class ...Fns>
+		struct meta_fold : exp_list<obj, Fns...>
+		{
+			static_assert(std::conjunction_v<is_meta_function_type<Fns>...>, "Error: non meta_function types in functions stream!");
+			using fold_o = meta_fold_apply_o<obj>;
+
+			using function_ip_stream = meta_istream<exp_list<Fns...>>;
+
+			using type = typename meta_all_transfer<fold_o, function_ip_stream>::to::type;
+
+			//fold stream type
+			using stream = meta_stream_o<sizeof...(Fns), fold_o, function_ip_stream>;
+
+		};
+	}
+	
 
 
 	template<class TL> using fs_final = typename meta_string_stream::join::final_join<TL>::type
@@ -775,6 +925,7 @@ namespace flex_string
 		using namespace static_wrap;
 		using namespace partial;
 		using namespace grouper;
+		using namespace fold;
 	}
 }
 template<template<typename ...> typename F, typename ...Typs>

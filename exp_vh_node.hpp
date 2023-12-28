@@ -6,9 +6,10 @@
 #include<string>
 #include<iostream>
 #include <type_traits>
+#include<optional>
 
 
-namespace VH_NODE
+namespace vh_node
 {
 	struct void_node {};
 	template<class TL, template<class...> class PW>
@@ -30,6 +31,19 @@ namespace VH_NODE
 	{
 		return ::push_back(n, value, shared_constructor());
 	}
+	template<class Node> constexpr bool node_has_next = std::decay_t<Node>::has_next;
+
+	struct next_node
+	{
+		template<typename Node> auto operator()(Node&& node) const
+		{
+			if constexpr (node_has_next<Node>)
+			{
+				return std::move(node.next_element());
+			}
+			else return node;
+		}
+	};
 
 #define member_enum(x,...) enum class x##_ifo{__VA_ARGS__};
 #define member_ref(x, m) x.at(static_cast<unsigned int>(x##_ifo::##m))
@@ -39,6 +53,8 @@ namespace VH_NODE
 	{
 		node_struct_base() = default;
 		node_struct_base(Typs&& ...typs):members(make_vh_shared_nodes(typs...)) {}
+		template<bool end_type, size_t I, class TL, template<class...> class Pw>
+		node_struct_base(element_<end_type, I, TL, Pw>&& node) : members(node) {}
 		exp_shared_vh_node<Typs...> members{};
 		exp_iterator<exp_shared_vh_node<Typs...>> member_iter{ members};
 		exp_iterator<exp_shared_vh_node<Typs...>>& at(unsigned int idx)
@@ -52,14 +68,24 @@ namespace VH_NODE
 		auto& operator*() { return members.next_element(); }
 		size_t size() { return member_iter.size(); }
 	};
+
+	template<bool end_type, size_t I, class vh, template<class ...> class TL, template<class ...> class Pw, class ...Args>
+	node_struct_base(element_<end_type, I, TL<vh, Args...>, Pw>&&) -> node_struct_base<Args...>;
+
 	using namespace function_impl;
 	template<class...Typs>
 	struct node_struct : node_struct_base<Typs...> 
 	{
+		node_struct() {}
 		node_struct(Typs&& ...typs) :node_struct_base<Typs...>(std::move(typs)...) {}
+		template<bool ET, size_t I, template<class...> class TL, class vh, class ...Args, template<class...> class Pw>
+		node_struct(element_<ET, I, TL<vh, Args...>, Pw>&& on) : node_struct_base<Args...>(std::move(on)) {}
 	};
 	
 	
 	template<class ...Typs>
 	node_struct(Typs&& ...typs) -> node_struct<Typs...>;
+
+	template<bool ET, size_t I, template<class...> class TL, class vh, class ...Args, template<class...> class Pw>
+	node_struct(element_<ET, I, TL<vh, Args...>, Pw>&& on) -> node_struct<Args...>;
 }

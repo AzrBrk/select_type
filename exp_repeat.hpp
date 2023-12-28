@@ -15,6 +15,10 @@ namespace exp_repeat
 	template<class F, class ...L>
 	using meta_invoke = typename Meta_Invoke<F, L...>::type;
 
+	struct below_zero {
+		static constexpr size_t value = 0;
+	};
+
 	template<size_t _I>
 	struct Idx {
 		static const size_t value = _I;
@@ -23,9 +27,9 @@ namespace exp_repeat
 	template<class _Idx, size_t _I>
 	struct Add_Idx {};
 
-	template<size_t _idx, class attach> struct idx_attached : Idx<_idx>
+	template<size_t I> struct Add_Idx<below_zero, I>
 	{
-		using type = attach;
+		using type = Idx<0>;
 	};
 
 	template<template<size_t> class _Idx, size_t _I_in_Idx, size_t _I>
@@ -94,10 +98,9 @@ namespace exp_repeat
 	struct meta_array
 	{
 		using cv_typelist = exp_list<Idx<_NUM>...>;
-		template<size_t N> struct apply :exp_select<N, cv_typelist>
-		{};
 		template<template<size_t...I> class integer_array_type>
 		using to = integer_array_type<_NUM...>;
+		template<size_t N> using at = exp_select<N, cv_typelist>;
 	};
 
 	template<class TL>
@@ -162,6 +165,18 @@ namespace exp_repeat
 			VERIFY_MUTABLE_ARGMENT(l)
 				(push_back(node, l, shared_constructor()), ...);
 		}
+		template<size_t N> struct idx_invoke {
+			using idx_sequence = meta_to_array<meta_itoa<N>>;
+
+			template<class F, size_t ...I, class ...Args> auto constexpr invoke_impl(meta_array<I...>, F&& f, Args ...args) const
+			{
+				return f.template operator() < I... > (std::forward<Args>(args)...);
+			}
+
+			template<class F, class ...Args> auto constexpr operator()(F&& f, Args&&...args) const {
+				return invoke_impl(idx_sequence{}, std::forward<F>(f), std::forward<Args>(args)...);
+			}
+		};
 
 	}
 	template<auto fn>
