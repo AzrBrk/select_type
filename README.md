@@ -664,7 +664,7 @@ int main()
 }
 //output: Michael is a grade [7] student. he heights at: [173] and weights at: [66]
 ```
-## Meta Programming For fstring
+## Meta Programming 
 ### Meta Object
 the meta data is not changable, while meta object can perform a changable-like behavior in a meta looper, in meta looper, the meta object recursivly change itself, the recursion is automatically done by looper, programmer doesn't need to do it manually.
 All the users has to do is to provide an object and a meta-function to describe how the changes is happened, further more, there are some common meta_object generators in namespace meta_traits::common_object, which helps you to quickly generate meta_objects.
@@ -982,7 +982,7 @@ Output:
 10[23.78,k]
 ```
 
-#### Debugging meta_object
+#### compile time loop
 The typeid operator of C++ may perform well in most situation, but it won't play well with `meta_object`, thus, the `exp_print` is for the `meta_object` users, the `exp_print::meta_print` is template class that act as the typeid operator,
 except it specializes some cases of provided type:
 - a typelist, output template<...>, it ignore the typelist name since in a meta_stream, a typelist is regarded as only  a container
@@ -990,7 +990,7 @@ except it specializes some cases of provided type:
 - a type with a size_t type as template argment, output I(I is a size_t variable)
 - `meta_object` -see below
 - `meta_timer_object` -see below
-- `ip_stream`, `op_stream` -see below
+- `meta_istream`, `meta_ostream` -see below
 The definition of meta_print something is as below
 ```cpp
 template<class T> struct meta_print
