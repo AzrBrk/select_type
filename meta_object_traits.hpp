@@ -290,13 +290,10 @@ namespace meta_traits
 			
 			if constexpr (current_looper::_continue_)
 			{
-				f.template operator() <typename mo_obj::type> (std::forward<Args>(args)...);
+				f.template operator() <typename current_looper::result_stage_o::type> (std::forward<Args>(args)...);
 				while_constexpr<mo_cnd, typename current_looper::result_stage_o, typename current_looper::generator_stage_o>
 				{}.recursively_invoke(std::forward<F>(f), std::forward<Args>(args)...);
-			}
-			else
-			{
-				f.template operator() < typename mo_obj::type > (std::forward<Args>(args)...);
+				
 			}
 		}
 
@@ -306,20 +303,12 @@ namespace meta_traits
 		{
 			if constexpr (current_looper::_continue_)
 			{
-				f.template operator()<typename mo_obj::type>(
+				f.template operator()<typename current_looper::result_stage_o::type>(
 					std::forward<O>(o),
 					std::forward<Args>(args)...
 					);
 				while_constexpr<mo_cnd, typename current_looper::result_stage_o, typename current_looper::generator_stage_o>
 				{}.recursively_transform_invoke(std::forward<F>(f), std::forward<TF>(tf), std::move(tf.template operator()(o)), std::forward<Args>(args)...);
-			}
-			else
-			{
-				f.template operator() < typename mo_obj::type > (
-					std::forward<O>(o),
-					std::forward<Args>(args)...
-					);
-
 			}
 		}
 
@@ -406,7 +395,17 @@ namespace meta_traits
 		struct replace_transform {
 			template<class thisObj, class _2> using apply = _2;
 		};
+		struct stop_when_true
+		{
+			template<class this_tl, class ...> struct apply: quick_reverse<this_tl>
+			{};
+		};
 
+		template<class F> struct stop_when_true_if
+		{
+			template<class this_tl, class...> struct apply : quick_value_b<meta_invoke<F, this_tl>::value>
+			{};
+		};
 		template<size_t N> struct meta_value_limiter_i_f
 		{
 			template<class Val_t, class...> struct apply : quick_value_i_lesser<Val_t::value, N>
