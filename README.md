@@ -1140,4 +1140,80 @@ int main()
         );
 }
 ```
-Note that `node_forward_condition_o`, `node_forward_o` has already in the library, if you'd like to use the them
+Note that `node_forward_condition_o`, `node_forward_o` has already in the library, if you'd like to use the them.
+# The `possibility`
+
+## Introduction
+
+The `possibility` utility is a meta-programming gem that aids in deducing the structure of aggregate types. This tutorial explores how to use `possibility` to extract member types from various aggregate structures.
+
+## Getting Started
+
+### Installation
+
+`possibility` is a header-only library, making integration into your projects a breeze. Simply include the `possibility.hpp` header file to start utilizing its capabilities.
+
+```cpp
+#include "possibility.hpp"
+```
+
+## The Basics of `possibility`
+
+`possibility` excels at deducing member types within aggregate structures. By providing a type list representing all possible types, `possibility` generates a type list containing the member types of the specified structure.
+
+Let's dive into a practical example to understand its usage better.
+
+```cpp
+#include "possibility.hpp"
+#include <iostream>
+#include <string>
+
+using namespace possibilities;
+
+struct S {
+    std::string str;
+    std::size_t index;
+    int aaa;
+    char c;
+    char d;
+    int sg;
+    double dd;
+};
+
+struct A {
+    int a;
+    int b;
+};
+
+struct B {
+    std::size_t idx;
+    std::string str;
+};
+
+int main() {
+    using possi = possibilities::tl<std::string, std::size_t, char, int, double>;
+
+    std::cout << typeid(possibility<S, possi>).name() << std::endl;
+    std::cout << typeid(possibility<A, possi>).name() << std::endl;
+    std::cout << typeid(possibility<B, possi>).name() << std::endl;
+}
+```
+
+### Output:
+
+```
+struct possibilities::tl<class std::basic_string<char,struct std::char_traits<char>,class std::allocator<char> >,unsigned __int64,int,char,char,int,double>
+struct possibilities::tl<int,int>
+struct possibilities::tl<unsigned __int64,class std::basic_string<char,struct std::char_traits<char>,class std::allocator<char> > >
+```
+
+In this example, the `possibility` utility deduces the member types of structures `S`, `A`, and `B` based on the provided type list (`possi`).
+
+## Important Notes
+
+- **Flexibility**: The provided type list doesn't have to precisely match the member types or their occurrences in the structures. Just list them once, and let `possibility` do the work.
+
+- **Compile-Time Error Handling**: If `possibility` encounters issues deducing the structure, it will trigger a compile-time error, providing early feedback on potential problems.
+
+- **Header-Only**: Integration is simplified with the header-only nature of `possibility.hpp`. However, note that longer type lists may increase compilation times due to the nature of meta-programming.
+
