@@ -43,7 +43,7 @@ namespace offset_pointer{
                 advance_layer<(value == 0)? 0 : 1>, align_offset_ptr<pack_size, layer, 
                 ((forward_size >= half_pack) ? ((value == 0) ? 0 : half_pack) : value) >>;
         };
-        template<std::size_t forward_size> using forward_offset = typename forward_impl<forward_size>::type;
+        template<std::size_t forward_size> using seek = typename forward_impl<forward_size>::type;
         //基于当前的层偏移，使用探索指针寻找给定的类型的首地址
         template<class T, class type> static type& get(T* ptr)
         {
@@ -51,8 +51,8 @@ namespace offset_pointer{
             return *(reinterpret_cast<type*>(
                 reinterpret_cast<unsigned char*>(ptr) +
                 (
-                    forward_offset<sizeof(type)>::layer * pack_size +
-                    forward_offset<sizeof(type)>::value
+                    seek<sizeof(type)>::layer * pack_size +
+                    seek<sizeof(type)>::value
                     )));
         }
     };
@@ -82,7 +82,7 @@ namespace offset_pointer{
     template<std::size_t I, class CTL, class T> void* get_pointer(T* x)
     {
         using types_iter = offset_iter<I, align_offset_ptr<alignof(T), 0, 0>, CTL>;
-        using explore_offset = typename types_iter::iter_type::template forward_offset<sizeof(typename types_iter::type)>;
+        using explore_offset = typename types_iter::iter_type::template seek<sizeof(typename types_iter::type)>;
 
         return reinterpret_cast<void*>(
             reinterpret_cast<unsigned char*>(x) + explore_offset::layer * alignof(T) + explore_offset::value
