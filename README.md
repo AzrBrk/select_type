@@ -1284,7 +1284,7 @@ int main()
 } // Output: a 2.33
 ```
 
-The `while_constexpr` function transfers the entire `meta_stream` object to this lambda at compile-time only, so it does not affect runtime efficiency. This finely crafted amalgamation of `possibility` and `align_offset_ptr` simplifies the task of iterating over complex aggregate structures and enhances compile-time processing capabilities, effectively taking metaprogramming in C++ to a whole new level.
+The `while_constexpr` transfers the entire `meta_stream` object to this lambda at compile-time only, so it does not affect runtime efficiency. This finely crafted amalgamation of `possibility` and `align_offset_ptr` simplifies the task of iterating over complex aggregate structures and enhances compile-time processing capabilities, effectively taking metaprogramming in C++ to a whole new level.
 
 ---
 
