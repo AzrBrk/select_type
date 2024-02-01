@@ -598,11 +598,6 @@ void exp_assign(X& x, Y&& y)
 		x = std::move(y.value);
 		return;
 	}
-	//if constexpr (requires(X _X, Y _Y) { _X = (X)_Y; })
-	//{
-	//	x = y;
-	//	return;
-	//}
 	std::cout << "warning: type mismatched, assigning failed(did nothing) with:\n" 
 		"X = "<< typeid(x).name() << "\nY = " << typeid(y).name() << std::endl;
 }
@@ -692,19 +687,15 @@ struct exp_iterator
 		return *this;
 	}
 
-
-	
-
-
 	template<class T>
 	T operator=(T const& value) { 
 		assign_at(first_node, value, exp_index); 
 		return value; 
 	}
-	exp_iterator& operator*() { return *this; }
+	exp_iterator<_node>& operator*() { return *this; }
 	exp_iterator<_node> begin() { 
 		exp_iterator<_node> beg{ first_node }; 
-		beg[0];
+		beg[exp_index];
 		return beg;
 	}
 	exp_iterator<_node> end() { 
@@ -789,8 +780,7 @@ struct exp_iterator
 		do_at(_n.first_node, output, _n.exp_index);
 		return os;
 	}
-	template<class F>
-	constexpr void transform(F&& f)
+	template<class F> constexpr void transform(F&& f)
 	{
 		do_at(first_node, f, exp_index);
 	}
@@ -1034,3 +1024,30 @@ using get_type = typename get_type_impl<T>::type;
 
 template<class T>
 constexpr bool has_type = get_type_impl<T>::value;
+
+template<template<template<class...> class, class ...> class F, class def = std::false_type> struct no_impl_for_typelist
+{
+	template<class T, class ...Other_Types> struct impl { using type = def; };
+	template<template<class...> class TL, class ...Args, class ...Other_Types> struct impl<TL<Args...>, Other_Types...>
+	{
+		using type = F<TL, Other_Types..., Args...>;
+	};
+
+	template<class T, class ...Other_Types> using apply = typename impl<T, Other_Types...>::type;
+};
+template<class TL> struct is_exp_list_based : std::false_type {};
+template<template<class ...> class TL, class ...TS>
+struct is_exp_list_based<TL<TS...>>
+{
+	static constexpr bool value = std::is_base_of_v<exp_list<TS...>, TL<TS...>>;
+};
+template<class TL> constexpr bool is_exp_list_based_v = is_exp_list_based<TL>::value;
+template<typename exp_tl, template<typename ...> class temp> requires is_exp_list_based_v<exp_tl>
+using exp_transform_to = typename exp_tl::template to<temp>;
+
+template<template<class ...> class Tl, class F, class ...Typs, class ...Args>
+constexpr std::size_t template_func_execute_launcher(Tl<Typs...>, F&& f, Args&&...args)
+{
+	(f.template operator()<Typs>(std::forward<Args>(args)...), ...);
+	return sizeof...(Typs);
+}
