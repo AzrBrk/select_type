@@ -270,9 +270,9 @@ namespace meta_traits
 	template<class MMO(Condition), class MMO(Obj), class MMO(Generator) = meta_object<meta_empty, meta_empty_fn>>
 	using meta_looper_stage = meta_invoke<meta_looper<true, MMO(Condition), MMO(Obj), MMO(Generator)>>;
 
+
 	//easy interface for template functor recursion
 	//imagination of while constexpr
-
 	template<class...> struct while_constexpr {};
 	template<typename mo_cnd, typename mo_obj, typename mo_gen> 
 	struct while_constexpr<mo_cnd, mo_obj, mo_gen>
@@ -427,8 +427,6 @@ namespace meta_traits
 		
 		struct node_forward_f
 		{
-			//if you'd like to exam if a node is available, use this_type::next_pointer_type instead
-			//by that way you will iterate the node by the pointer, instead the element itself
 			template<class this_type, class ...> using apply = typename this_type::next_type;
 		};
 
@@ -441,8 +439,32 @@ namespace meta_traits
 				static constexpr bool value = this_type::has_next;
 			};
 		};
+		template<class Cache, class T> struct decrease_cache
+		{
+			using cache = Cache;
+			using type = no_exist_type;
+		};
 
-		
+		template<class Cache, template<class ...> class TL, class first, class ...rest>
+		struct decrease_cache<Cache, TL<first, rest...>>
+		{
+			using pop_front = decrease_cache<first, TL<rest...>>;
+			using cache = Cache;
+			using type = TL<first, rest...>;
+		};
+		struct decrease_cache_f
+		{
+			template<class this_tl, class ...> using apply = typename this_tl::pop_front;
+		};
+		struct decrease_cache_ret
+		{
+			template<class this_tl> using apply = typename this_tl::cache;
+		};
+		template<class cache, class TL> struct type_list_size<decrease_cache<cache, TL>> :size_of_type_list<TL> {};
+
+
+
+		template<class TL> using meta_cache_ret_o = meta_ret_object<decrease_cache<meta_empty, TL>, decrease_cache_f, decrease_cache_ret>;
 
 		template<size_t N> using meta_value_limiter_i_co = meta_object<Idx<0>, meta_value_limiter_i_f<N>>;
 
@@ -504,6 +526,9 @@ namespace meta_traits
 	}
 	template<class MMO(Obj), class MMO(Generator) = common_object::meta_empty_o>
 	using meta_timer_looper_t = meta_looper_t<common_object::meta_timer_cnd_o, MMO(Obj), MMO(Generator)>;
+	template<class ...MO> using make_loop = meta_looper<true, MO...>;
+	template<class MTO, class GO = common_object::meta_empty_o> using make_timer_loop = meta_looper<true, common_object::meta_timer_cnd_o, MTO, GO>;
+
 
 	template<size_t N, class mo_obj, class mo_f, class break_f>
 	struct while_constexpr<meta_timer_object<N, mo_obj, mo_f, break_f>> :
@@ -551,18 +576,20 @@ namespace meta_traits
 		template<size_t counts> requires (counts >= 1) struct count_impl<Idx<counts>>
 		{
 			using count_gen = typename meta_timer_looper_t<
-				meta_timer_object<counts - 1, exp_list<>, common_object::append>,
+				meta_timer_object<counts, exp_list<>, common_object::append>,
 				common_object::meta_idx_inc_gen_o<I>
 			>::type;
-			using type = get_type<add_to_front<Idx<I>, count_gen>>;
+			using type = count_gen;
 		};
 		template<class counts>
 		using apply = get_type<count_impl<counts>>;
 	};
 
 	template<size_t I, size_t counts> requires (counts >= 1)
-		using meta_cout = meta_integer_segment<Idx<I>>::template apply<Idx<counts>>;
+		using meta_count = meta_integer_segment<Idx<I>>::template apply<Idx<counts>>;
 
 	template<size_t I, size_t counts> using list_slice = exp_repeat::meta_to_array<
-		meta_cout<I, counts>>::template to<exp_select_list>;
+		meta_count<I, counts>>::template to<exp_select_list>;
+
+	
 }

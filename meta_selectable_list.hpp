@@ -38,7 +38,7 @@ namespace meta_typelist
 	using meta_istream = meta_ret_decreasible_o<TL>;
 
 	//a stream that generate increasing integer
-	template<size_t N> using meta_integer_istream = meta_ret_decreasible_o<typename meta_itoa<N>::template to<decrease_list>>;
+	template<size_t N> using meta_integer_istream = meta_ret_decreasible_o<typename meta_iota<N>::template to<decrease_list>>;
 
 	//the meta_stream_object is based on meta_timer_object
 	//add a break condition if you try to block the stream
@@ -178,7 +178,7 @@ namespace meta_typelist
 	template<class mso> using stream_final_t = typename mso::to::type;
 	template<class F> struct meta_stream_op
 	{
-		template<class mso, class ...Args> using apply = meta_invoke<F, typename mso::to::type, Args...>;
+		template<class mso, class ...Args> using apply = meta_invoke<F, stream_final_t<mso>, Args...>;
 	};
 	
 	template<class ...Typs>
@@ -216,7 +216,6 @@ namespace meta_typelist
 
 			template<size_t NS> using tag_to = transform_to<_tag<NS>>;
 
-			//using erase =typename experiment::erase_at_t<N, selectable_list<Typs...>>::type;
 
 			template<size_t idx>
 			using swap_with = typename meta_swap<exp_repeat::Idx<N>, exp_repeat::Idx<idx>, selectable_list<Typs...>>::type;
@@ -282,5 +281,226 @@ namespace meta_typelist
 
 	};
 
-	
+	namespace list_common_object
+	{
+		template<class TL1, class TL2> struct append_list;
+		template<template<typename...> typename tlist1, typename ...Typs1, template<typename ...> typename tlist2, typename ...Typs2>
+		struct append_list<tlist1<Typs1...>, tlist2<Typs2...>>
+		{
+			using type = tlist1<Typs1..., Typs2...>;
+		};
+
+		template<class front, class back> struct trim_back { using type = no_exist_type; };
+		template<
+			template<class...> class front,
+			template<class...> class back,
+			class ...front_types,
+			class back_first, class ...back_rest>
+		struct trim_back<front<front_types...>, back<back_first, back_rest...>>
+		{
+			using type = typename trim_back<front<front_types..., back_first>, back<back_rest...>>::type;
+		};
+		template<template<class ...> class front,
+			template<class> class back,
+			class ...front_types,
+			class back_type
+		>
+		struct trim_back<front<front_types...>, back<back_type>>
+		{
+			using type = front<front_types...>;
+		};
+
+		template<class T> struct trim;
+		template<template<class...> class tlist, class ...types> struct trim<tlist<types...>>
+		{
+			using type = typename trim_back<tlist<>, tlist<types...>>::type;
+		};
+
+		template<class T> struct trim_f;
+		template<template<class...> class tlist, class first, class ...rest> struct trim_f<tlist<first, rest...>>
+		{
+			using type = tlist<rest...>;
+		};
+
+		template<class...Args> struct meta_list :exp_list<Args...>
+		{
+			static constexpr std::size_t length = sizeof...(Args);
+
+			template<template<typename ...> typename m_alias>
+			using as = m_alias<Args...>;
+
+			template<class T> using append = meta_list<Args..., T>;
+			template<class T> using r_append = meta_list<T, Args...>;
+
+			template<class T = void>
+			using trim_last = get_type<trim<meta_list<Args...>>>;
+
+			template<class T = void>
+			using trim_front = get_type<trim_f<meta_list<Args...>>>;
+
+		};
+		template<class typelist> struct offset_array {};
+		template<template<class...> class typelist, class ...types> struct offset_array<typelist<types...>>
+		{
+			using type = meta_array<sizeof(types)...>;
+		};
+
+		template<class typelist> using offset_array_t = get_type<offset_array<typelist>>;
+
+		template<class TL> using to_meta_list_t = typename to_exp_list<TL>::type::template to<meta_list>;
+
+
+
+		//trim typelist until meet con
+
+		//from -> to
+		struct reverse_decrease
+		{
+			template<class meta_tl> struct apply_impl
+			{
+				using type = no_exist_type;
+
+			};
+
+			template<template<class...> class this_tl, class first, class ...types> struct apply_impl<this_tl<first, types...>>
+			{
+				using type = typename meta_list<first, types...>::template trim_last<>::template to<this_tl>;
+			};
+
+			template<class this_tl, class ...> using apply = get_type<apply_impl<this_tl>>;
+		};
+
+		struct reverse_decrease_ret
+		{
+			template<class this_tl> struct apply_impl
+			{
+				using type = no_exist_type;
+			};
+			template<template<class...> class this_tl, class first, class ...types> struct apply_impl<this_tl<first, types...>>
+			{
+				using type = exp_select<
+					max_index<this_tl<first, types...>>,
+					this_tl<first, types...>
+				>;
+			};
+
+			template<class this_tl> using apply = get_type<apply_impl<this_tl>>;
+		};
+
+		template<class TL> using meta_reverse_istream = meta_ret_object<TL, reverse_decrease, reverse_decrease_ret>;
+		template<class TL> struct reverse_typelist
+		{
+			using type = typename meta_all_transfer<
+				meta_ostream<exp_list<>>,
+				meta_reverse_istream<TL>
+			>::to::type;
+		};
+
+		template<class TL> using reverse_t = typename reverse_typelist<TL>::type;
+
+		template<class TL> using meta_reverse_decrease_o = meta_object<TL, reverse_decrease>;
+		template<class T> using meta_empty_alias = T;
+		template<class T> using meta_self_o = meta_object<T, meta_empty_fn>;
+
+		template<template<class> class F>
+		struct list_apply_f
+		{
+			template<class this_tl, class T> using apply = exp_fn_apply<F<T>, this_tl>;
+		};
+
+		struct attach_f
+		{
+			template<class this_selectable_o, class T> using apply = selectable_list<typename this_selectable_o::template get<0>, T>;
+		};
+		template<class T> using meta_attach_o = meta_object<selectable_list<T, T>, attach_f>;
+
+
+		template<class TL, template<class> class F> using meta_list_apply_o = meta_object<TL, list_apply_f<F>>;
+		template<std::size_t N, class TL, template<class> class F> using meta_list_apply_to = meta_timer_object<N, TL, list_apply_f<F>>;
+
+
+	}
+
+
+	namespace collector
+	{
+		template<class looper> constexpr bool meta_looper_status = 
+			meta_invoke<invoke_meta_function_if<is_meta_function_v<looper>>, looper>::_continue_;
+
+		//break_condition
+		struct collect_stream_break_if_looper_stop
+		{
+			template<class collect_stream> struct apply
+			{
+				static constexpr bool value = !meta_looper_status<typename collect_stream::from::type>;
+			};
+		};
+
+		//progressing the looper, use the looper itself as a meta istream
+		struct collect_stream_update_f
+		{
+			template<class this_looper> struct impl
+			{
+				using type = no_exist_type;
+			};
+			template<bool c, class Mc, class Mo, class Mg> struct impl<meta_looper<c, Mc, Mo, Mg>>
+			{
+				using l_invoke_t = meta_invoke<meta_looper<c, Mc, Mo, Mg>>;
+				using type = meta_looper<c, Mc, 
+					typename l_invoke_t::result_stage_o, typename l_invoke_t::generator_stage_o>;
+			};
+			template<class this_looper, class ...> using apply = typename impl<this_looper>::type;
+		};
+
+		struct collect_stream_ret_f
+		{
+			template<class this_looper> using apply = typename meta_invoke<this_looper>::result_stage_o::type;
+		};
+
+		//instantiate the type_list_size with looper type to make the looper size infinitely long
+		//because we can't predict what is processing in the looper, we use a break condition instead to end the meta-stream
+		template<bool c, class Mc, class Mo, class Mg>
+		struct type_list_size<meta_looper<c, Mc, Mo, Mg>> :quick_value_i<static_cast<std::size_t>(-1)> {};
+
+		//the meta-stream object can be use in a while_constexpr or meta_looper directly
+		template<class looper> using meta_collect_ostream = break_if<meta_stream_o<
+			exp_size<looper>,
+			meta_ostream<exp_list<>>,
+			meta_ret_object<looper, collect_stream_update_f, collect_stream_ret_f>
+		>, collect_stream_break_if_looper_stop>;
+
+		template<class looper> struct looper_collector
+		{
+			using type = typename meta_timer_looper_t<meta_collect_ostream<looper>>::type::to::type;
+		};
+		template<class looper> using collect = typename looper_collector<looper>::type;
+		template<std::size_t N, class os, class ins>
+		struct collector::looper_collector<meta_stream_o<N, os, ins>> :
+			exp_apply<typename collector::looper_collector<make_timer_loop<meta_stream_o<N, os, ins>>>::type, stream_final_t>
+		{};
+
+
+		template<class T, template<class> class ...collectable_f> struct meta_pipe_collect_stream_impl
+		{
+			template<class obj, template<class ...> class ...collectable_> struct collect_apply_recurse;
+			template<class obj, template<class...> class first, template<class...> class ...rest> struct collect_apply_recurse<obj, first, rest...>
+			{
+				using recurse_type = collect_apply_recurse<collect<first<obj>>, rest...>;
+				using type = typename recurse_type::type;
+			};
+			template<class obj> struct collect_apply_recurse<obj>
+			{
+				using type = obj;
+			};
+			using type = typename collect_apply_recurse<T, collectable_f...>::type;
+		};
+
+		template<class T, template<class> class...collectable_f> using meta_pipe = typename meta_pipe_collect_stream_impl<T, collectable_f...>::type;
+	}
+	template<class looper, class F, class ...Args>
+	constexpr std::size_t collect_looper(F&& f, Args&& ...args)
+	{
+		using used_types = collector::collect<looper>;
+		return template_func_execute_launcher(used_types{}, f, std::forward<Args>(args)...);
+	}
 }
