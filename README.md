@@ -154,7 +154,9 @@ Unlike `std::function`, the `exp_function_binder` keeps the arguments within its
 ```cpp
 #include <iostream>
 #include "exp_function_binder.hpp"
+#include "exp_operatible.hpp"
 
+using namespace exp_operators;
 using namespace exp_bind;
 
 int foo(int i, std::string str) { for(std::size_t j = 0; j < i ; ++j){ std::cout << str << " ";} return i; }
@@ -176,8 +178,9 @@ int main()
 
         // You can also change the bound argument in a function
 	// the tuple iterator lets you malipulate tuple in a runtime context, but at the cost of runtime calculating
+	// but convinient for coding if you don't mind
         efb[0] = 3;
-	efb[1] = std::string("hello world");
+	efb[1] += std::string(" world");
         std::cout << "Argument changed to 3: " << efb() << '\n';
 
         // You can also undo the binding operation using counts
