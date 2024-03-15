@@ -157,7 +157,7 @@ Unlike `std::function`, the `exp_function_binder` keeps the arguments within its
 
 using namespace exp_bind;
 
-int foo(int i) { return i; }
+int foo(int i, std::string str) { for(std::size_t j = 0; j < i ; ++j){ std::cout << str << " ";} return i; }
 
 struct X
 {
@@ -170,20 +170,23 @@ int main()
         // Binding a function
         exp_function_binder efb{ foo };
         efb.bind(10);
+	efb.bind(std::string{"hello"});
 
         std::cout << efb() << '\n';
 
         // You can also change the bound argument in a function
+	// the tuple iterator lets you malipulate tuple in a runtime context, but at the cost of runtime calculating
         efb[0] = 3;
+	efb[1] = std::string("hello world");
         std::cout << "Argument changed to 3: " << efb() << '\n';
 
         // You can also undo the binding operation using counts
         // Note that once the function is called, the counter for the binder is reset
-        efb.bind(0);
-        efb.rebind_back(1);
-        std::cout << efb(4) << '\n';
+        efb.bind(0, std::string("str"));
+        efb.rebind_back(2);
+        std::cout << efb(4, std::string("from Ak tech.")) << '\n';
     }
-
+	//binding to lambda and member function has same functions, so next is only demonstrating of binding
     {
         // Binding a lambda
         auto efb = exp_bind::bind([](int i) { return i; });
