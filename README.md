@@ -223,6 +223,7 @@ To create a binder for a lambda or functor template, you need to specify the tem
 
 ```cpp
 #include <iostream>
+#include <vector>
 #include "exp_function_binder.hpp"
 #include "function_impl.hpp"
 
@@ -240,6 +241,15 @@ int main()
     auto efb = exp_bind::bind(realize_meta<exp_list<int, double, char>>(f));
 
     efb(1, 2.33, 'c');
+    //Also changes of argument can be made to the args stack once bound
+    efb[2] = 'k';
+    efb();
+
+    //Also you can use the efb function to create such vector with
+    auto vec_f = []<class ...Args>(Args ...args)-> std::vector<std::common_type_t<Args...>>{ return {args...};};
+    auto vec_efb = exp_bind::bind(realize_meta<exp_list<int,int,int,int,int>>(vec_f));
+    for(auto i = 0 ; i < 5; ++i) vec_efb.bind(i*2+1);
+    auto vec = vec_efb();
 
     return 0;
 }
