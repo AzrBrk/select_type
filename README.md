@@ -185,7 +185,7 @@ int main()
 
         // You can also undo the binding operation using counts
         // Note that once the function is called, the counter for the binder is reset
-        efb.bind(0, std::string("str"));
+        efb.bind_a_lot(0, std::string("str"));
         efb.rebind_back(2);
         std::cout << efb(4, std::string("from Ak tech.")) << '\n';
     }
